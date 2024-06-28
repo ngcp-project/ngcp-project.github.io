@@ -1,0 +1,13 @@
+---
+title: Example Embedded Component
+---
+import { Code } from '@astrojs/starlight/components';
+
+import Test from './components/test.component.vue';
+import TestCode from './components/test.component.vue?raw';
+
+Example test component
+
+<Test label="test" />
+
+<Code code={TestCode} lang="vue" title='./components/test.component.vue'/>
