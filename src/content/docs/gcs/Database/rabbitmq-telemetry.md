@@ -11,6 +11,6 @@ This page provides instructions on how to set up and test:
 2. Install [Python](https://wiki.python.org/moin/BeginnersGuide/Download)
 
 ## Instructions
-1. Setup [Docker Container](docker-setup.md)
-2. Set up [Python Virtual Environment](python-env.md)
+1. Setup [Docker Container](../docker-setup)
+2. Set up [Python Virtual Environment](../python-env)
 3. ...

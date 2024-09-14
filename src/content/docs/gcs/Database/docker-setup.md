@@ -15,4 +15,4 @@ PASSWD="sample-password"`
 3. Run `dotnet run` in console
 4. Open Redis Commander and log in with the credentials set in the `.env` file
 
-## Next Step: [Python Virtual Environment Setup](https://github.com/Northrop-Grumman-Collaboration-Project/gcs-database-api/wiki/Python-Virtual-Environment-Setup)
+## Next Step: [Python Virtual Environment Setup](../python-env)
