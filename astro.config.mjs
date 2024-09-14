@@ -5,6 +5,7 @@ import vue from '@astrojs/vue';
 
 // https://astro.build/config
 export default defineConfig({
+	site: 'https://ngcp-project.github.io',
 	integrations: [
 		starlight({
 			title: 'NGCP Ground Control Systems',
