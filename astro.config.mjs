@@ -10,7 +10,7 @@ export default defineConfig({
 		starlight({
 			title: 'NGCP Ground Control Systems',
 			social: {
-				github: 'https://github.com/withastro/starlight',
+				github: 'https://github.com/ngcp-project',
 			},
 			sidebar: [
 				{
