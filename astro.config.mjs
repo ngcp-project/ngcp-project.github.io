@@ -8,7 +8,7 @@ export default defineConfig({
 	site: 'https://ngcp-project.github.io',
 	integrations: [
 		starlight({
-			title: 'NGCP Ground Control Systems',
+			title: 'NGCP Documentation Hub',
 			social: {
 				github: 'https://github.com/ngcp-project',
 			},
