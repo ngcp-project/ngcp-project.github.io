@@ -14,36 +14,11 @@ export default defineConfig({
 			},
 			sidebar: [
 				{
-					label: 'Getting Started',
-					link: '/getting-started',
-				},
-				{
-					label: 'User Interface',
+					label: 'Ground Control Systems',
 					autogenerate: {
-						directory: 'user-interface',
+						directory: 'gcs',
+						labelCase: 'title',
 					},
-				},
-				{
-					label: 'Databse & API',
-					autogenerate: {
-						directory: 'database',
-					},
-				},
-				{
-					label: 'Vehicle Integration',
-					autogenerate: {
-						directory: 'vehicle-integration',
-					},
-				},
-				{
-					label: 'Infrastucture',
-					autogenerate: {
-						directory: 'infrastructure',
-					},
-				},
-				{
-					label: 'Resources',
-					link: '/resources',
 				},
 			],
 		}),
