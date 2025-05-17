@@ -1,10 +1,8 @@
 ---
-title: Database 24-25 Overview
+title: Design Decisions
 description: Home page for Database team documentation for the 2024-2025 year.
 ---
 
-# Overview
-This is an overview.
-
 # State Manager Documentation
-
+- [State Manager](state-manager)
+- [State Manager Design Decisions](design-decisions)
