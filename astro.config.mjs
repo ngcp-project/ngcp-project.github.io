@@ -9,9 +9,9 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'NGCP Documentation Hub',
-			social: {
-				github: 'https://github.com/ngcp-project',
-			},
+			social: [
+			  { icon: 'github', label: 'GitHub', href: 'https://github.com/ngcp-project' }
+			],
 			sidebar: [
 				{
 					label: 'Ground Control Systems',
