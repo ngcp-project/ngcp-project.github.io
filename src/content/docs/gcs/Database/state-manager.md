@@ -1,7 +1,10 @@
 ---
 title: Stage Manager
-description: Home page for Database team documentation for the 2024-2025 year.
+description: Explains purpose of the state manager and how it works
 ---
 
-# Sample
+# Key Assumptions Made
+
+
+# Function documentation and purpose
 - All corresponding functions and their purpoes
