@@ -1,6 +1,8 @@
 ---
 title: Resources
 description: External resources useful for members of the NGCP project
+sidebar:
+  order: 1
 ---
 
 # Ground Control Station
@@ -14,7 +16,7 @@ description: External resources useful for members of the NGCP project
 * [Common Conventions for Writing Commit Titles](https://www.conventionalcommits.org/en/v1.0.0-beta.2/) `docs` `article`
 
 ### Docker
-* [Docker Setup](./database/docker-setup.md)
+* [Docker Setup](../../archive-gcs/database-23-24/docker-setup/) `docs`
 
 ### Linux
 

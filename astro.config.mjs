@@ -20,6 +20,14 @@ export default defineConfig({
 						labelCase: 'title',
 					},
 				},
+				{
+					label: 'Archived - Ground Control Systems',
+					autogenerate: {
+						directory: 'archive-gcs',
+						labelCase: 'title'
+					},
+					collapsed: true,
+				},
 			],
 		}),
 		vue(),
