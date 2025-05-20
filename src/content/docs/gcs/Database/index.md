@@ -1,17 +1,10 @@
 ---
-title: Database API
-description: Home page for Database API documentation
+title: Database 24-25 Overview
+description: Home page for Database team documentation for the 2024-2025 year.
+sidebar:
+    order: 2
 ---
 
-## Endpoint Documentation
-- [Emergency Stop Command](emergency-stop)
-- [Geofence Zones](zones) 
-- [Mission Info](mission-info)
-- [Mission Stages](mission-stage)
-
-
-## Resources
-* [Setting up VS Code Profile](vscode-profile)
-* [Testing the Sending and Receiving of Telemetry Data (WebSocket + RabbitMQ)](rabbitmq-telemetry)
-* [Docker Setup](docker-setup)
-* [Python Virtual Environment Setup](python-env)
+# State Manager Documentation
+- [State Manager](state-manager)
+- [State Manager Design Decisions](design-decisions)

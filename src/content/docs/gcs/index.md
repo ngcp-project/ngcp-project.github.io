@@ -1,5 +1,7 @@
 ---
-title: Ground Control Station
+title: Overview
+sidebar:
+  order: 1
 ---
 
 Welcome to the NGCP Ground Control Station documentation!
