@@ -1,5 +1,5 @@
 ---
-title: Telemtry
+title: Telemetry
 ---
 
 
