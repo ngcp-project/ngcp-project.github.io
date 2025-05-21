@@ -19,7 +19,7 @@ Learn how to syncrhonize states between our backend and frontend via Zustand sto
   - [Mission](./state-management/implementation/mission-frontend)
   - [Telemetry](./state-management/implementation/telemetry-frontend)
 
-### UI Components
+<!-- ### UI Components
 
 Documentation for various Vue components.
 
@@ -32,4 +32,4 @@ Learn how to embed external binaries at runtime via Tauri's sidecars.
 - [Tauri Sidecar](./sidecars/tauri-sidecar)
 
   #### Implementation
-  - [FPV Camera Server](./sidecars/implementation/fpv-camera-server)
+  - [FPV Camera Server](./sidecars/implementation/fpv-camera-server) -->
