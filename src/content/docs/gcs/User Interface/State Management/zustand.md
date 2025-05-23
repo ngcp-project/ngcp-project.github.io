@@ -10,11 +10,21 @@ Currently, we are using this for [Mission](../implementation/mission-frontend) a
 
 The following diagram provides an overview of how state management works on the frontend.
 
-![State Management Diagram](../assets/State-Management-Diagram.png)
+![State Management Diagram](../assets/State-Management-Diagram.webp)
 
 ## How it Works
 
-To use Zustand, we must create a store. A store is an object that contains the state and methods for the application. This store is a centralized place to store states and logic. Whenever states update in the Tauri Rust backend, the store will also update with the new states. The Vue frontend then can read from these states after the update, ensuring synchronized data between the backend and the frontend.
+To use Zustand, we must create a **store**. A store is an object that contains the state and methods for the application. This store is a centralized place to store states and logic. Whenever states update in the Tauri Rust backend, the store will also update with the new states. The Vue frontend then can read from these states after the update, ensuring synchronized data between the backend and the frontend.
+
+One thing to note is that stores *can* communicate with each other. If the data-flow of one API is similar or related to another API's, then we can utilize multiple stores to achieve a task. We'll explain this with an example using the Map Store and Mission Store.
+
+For some quick context, we use a map to designate zones for the vehicle's area of operations.
+
+![State Management Diagram](../assets/Map-Mission-Store-Diagram.webp)
+
+The Map Store is strictly responsible for updating the zones visually, so it is not responsible for updating the data of the zonse. To do the latter, we use the methods in the Mission Store to update the zones data to our Rust backend. Hence, there is a layer of abstraction where methods from one store are being called by methods in another store.
+
+[Matthew can elaborate more on this]
 
 ### Creating a Store
 
@@ -89,7 +99,7 @@ export interface ExampleStore {
 
 ## A Pitful of Zustand
 
-Our frontend framework, Vue, is _reactive_, meaning the UI automatically updates when the state changes. Zustand is _not reactive_, which means we need a workaround.
+Our frontend framework, Vue, is **_reactive_**, meaning the UI automatically updates when the state changes. Zustand is _not reactive_, which means we need a workaround.
 
 ### Workaround
 
