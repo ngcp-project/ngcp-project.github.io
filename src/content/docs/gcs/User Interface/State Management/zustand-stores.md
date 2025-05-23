@@ -45,7 +45,7 @@ import { ExampleStore } from "@/lib/MissionStore.types"; // #4
 
 **#1** is for the createStore function.
 
-**#2** is used in a workaround to make Zustand reactive. Refer to [A Pitful of Zustand](#a-pitful-of-zustand).
+**#2** is used in a workaround to make Zustand reactive. Refer to [A Pitfall of Zustand](#a-pitfall-of-zustand).
 
 **#3** is for initializing the store.  
 - `createTauRPCProxy` is a function that creates a proxy for **TauRPC**, our backend Tauri API library. This allows the frontend to easily call backend functions as if they were local functions through a TypeScript API, while abstracting away the **remote procedure call (RPC)** details.  
@@ -167,7 +167,7 @@ exampleZustandStore.subscribe((newState) => {
 
 With the `.subscribe()` method, Zustand is listening for any changes to the state. When a change is found, it assigns the new state into the store.
 
-Lastly, we'll need this line at the bottom. This will be explained in [A Pitful of Zustand](#a-pitful-of-zustand).
+Lastly, we'll need this line at the bottom. This will be explained in [A Pitfall of Zustand](#a-pitfall-of-zustand).
 
 ```typescript
 export const exampleStore: DeepReadonly<ExampleStore> =
@@ -188,7 +188,7 @@ export interface ExampleStore {
 }
 ```
 
-## A Pitful of Zustand
+## A Pitfall of Zustand
 
 Zustand is an attractive framework-agnostic solution to centralized APIs between backend and frontend due to it being lightweight, fast, and scalable, but only after implementation did we realize why it was not used for Vue applications.
 
