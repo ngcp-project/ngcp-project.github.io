@@ -13,7 +13,7 @@ User Interface documentation for the 2024-2025 year.
 
 Learn how to syncrhonize states between our backend and frontend via Zustand stores.
 
-- [Zustand](./state-management/zustand)
+- [Zustand Stores](./state-management/zustand-stores)
 
   #### Implementation
   - [Mission](./state-management/implementation/mission-frontend)

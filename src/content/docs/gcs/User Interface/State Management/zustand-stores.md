@@ -1,12 +1,12 @@
 ---
-title: Zustand
+title: Zustand Stores
 sidebar:
   order: 3
 ---
 
 **Zustand** is a state management library used as our solution to synchronizing states between the backend (TauRPC & RabbitMQ) and the frontend (Vue.js). Everything discussed in the following sections will be primarily focused on the frontend side.
 
-Currently, we are using this for [Mission](../implementation/mission-frontend) and [Telemetry](../implementation/telemetry-frontend). Check out the respective pages for documentation on the state management for vehicle missions and vehicle telemetry.
+Currently, we are using this for [Map](../implementation/map-frontend), [Mission](../implementation/mission-frontend), and [Telemetry](../implementation/telemetry-frontend). Check out the respective pages for documentation on the state management for vehicle missions and vehicle telemetry.
 
 The following diagram provides an overview of how state management works on the frontend.
 
@@ -28,11 +28,9 @@ The Map Store is strictly responsible for updating the zones visually, so it is 
 
 ### Creating a Store
 
-Stores will be a `.ts` stored under `src/components/lib`.
+Stores will be a `.ts` file stored under `src/components/lib`. Both the store and type definition file will be located here.
 
-//  
-// More details here  
-//
+
 
 #### Backend Listeners
 
@@ -85,7 +83,7 @@ export const exampleStore: DeepReadonly<ExampleStore> =
 
 ### Typing
 
-As per usual with TypeScript, we need to define the types and interfaces used in our store. Make a `.types.ts` file for the store.
+As per usual with TypeScript, we need to define the types and interfaces used in our store. Make a `.types.ts` file for the store, located in the same directory.
 
 Main takeaway is to export an interface of the store, with type definitions for each method used. We'll also need to define the type of the backend state used in the Store.
 
@@ -99,7 +97,9 @@ export interface ExampleStore {
 
 ## A Pitful of Zustand
 
-Our frontend framework, Vue, is **_reactive_**, meaning the UI automatically updates when the state changes. Zustand is _not reactive_, which means we need a workaround.
+Zustand is an attractive framework-agnostic solution to centralized APIs between backend and frontend due to it being lightweight, fast, and scalable, but only after implementation did we realize why it was not used for Vue applications.
+
+Our frontend framework, Vue, is **_reactive_**, meaning the UI automatically updates when the state changes. Unfortunately, Zustand is _not reactive_. Since it was too late to go back on the implementation, we need to use a workaround.
 
 ### Workaround
 
@@ -110,9 +110,9 @@ export const exampleStore: DeepReadonly<ExampleStore> =
   reactive(exampleZustandStore.getState());
 ```
 
-We are recreating and exporting the store by wrapping the store's current state with Vue's Reactive object. With this wrap, we can allow components to automatically rerender on changes to the store. The `DeepReadonly` type will make all properties read-only to prevent accidental changes to the state and desync.
+We are recreating and then exporting the store by wrapping the store's current state with Vue's Reactive object. With this wrap, we allow components to automatically rerender on changes to the store. The `DeepReadonly` type will make all properties read-only to prevent desync and accidental changes to the state.
 
-There is one more thing that needs to be added to whatever Vue component we are using the store in. We'll be using our Mission store and MapSidebar component as an example.
+There is one more thing that needs to be added to whatever Vue component we are using the store in. We'll be using `MapSidebar.vue` component as an example. This component will read states from `MissionStore.ts`.
 
 ```vue
 <script>
@@ -134,6 +134,6 @@ There is one more thing that needs to be added to whatever Vue component we are 
 </template>
 ```
 
-Whenever `missionState.state` is updated, the `stateUpdate` constant will read the state value and return a boolean. This boolean simply switches between true and false, which will toggle the Sidebar off/on, thus causing Vue to rerender the component with the updated state values.
+Whenever `missionStore.state` is updated, the `stateUpdate` constant will read the state value and return a boolean. This boolean simply switches between true and false, which will toggle the Sidebar off/on, thus causing Vue to rerender the component with the updated state values.
 
 In the future, we hope to find other solutions for state management-- possibly standalone Vue state management systems such as [Pinia](https://pinia.vuejs.org/).
