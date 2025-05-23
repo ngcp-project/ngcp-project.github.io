@@ -26,13 +26,106 @@ The Map Store is strictly responsible for updating the zones visually, so it is 
 
 [Matthew can elaborate more on this]
 
-### Creating a Store
+## Creating a Store
 
-Stores will be a `.ts` file stored under `src/components/lib`. Both the store and type definition file will be located here.
+This guide will assume there is already a backend API set up. At the very least, a `types.rs` file (which you can find under `src-tauri/src/[api name]`). For examples of stores, please refer to the **Implementation** section in the sidebar.
 
+Fair warning, stores can be a bit tricky to figure out! Do not hesistate to ask the UI team for help!
 
+### Initialization
 
-#### Backend Listeners
+First, create a store file called `[store name].ts` file under `src/components/lib`. We'll need to import some dependencies.
+
+```typescript
+import { createStore } from "zustand/vanilla"; // #1
+import { DeepReadonly, reactive } from "vue"; // #2
+import { createTauRPCProxy, ExampleStruct } from "@/lib/bindings"; // #3
+import { ExampleStore } from "@/lib/MissionStore.types"; // #4
+```
+
+**#1** is for the createStore function.
+
+**#2** is used in a workaround to make Zustand reactive. Refer to [A Pitful of Zustand](#a-pitful-of-zustand).
+
+**#3** is for initializing the store.  
+- `createTauRPCProxy` is a function that creates a proxy for **TauRPC**, our backend Tauri API library. This allows the frontend to easily call backend functions as if they were local functions through a TypeScript API, while abstracting away the **remote procedure call (RPC)** details.  
+- `ExampleStruct` is the struct being used to store states in the API. Refer to the associated `types.rs` file to figure out which structs to import.  
+
+**#4** is the interface of your store. Refer to [Typing](#typing).
+
+Right after the imports, we will use the following two lines to initialize the TauRPC proxy and the initial state of our store.
+
+```typescript
+// Create TauRPC proxy
+const taurpc = createTauRPCProxy();
+
+// Fetch initial state from backend
+const initialState: ExamplesStruct = await taurpc.example.get_all_examples();
+```
+
+For initial state, there is usually an exposed function from the backend that will fetch all necessary states for your store/struct. Notice how the `get_all_examples()` function is being accessed via the `taurpc` const.
+
+Now the store can be created.
+
+```typescript
+export const exampleZustandStore = createStore<ExampleStore>((set, get) => ({
+  state: initialState
+
+  syncRustState: (rustState: ExamplesStruct) => {
+    set(
+      () =>
+        ({
+          state: rustState
+        }) satisfies Partial<ExampleStore> // Satisfies a portion of the store interface
+    );
+  },
+}));
+```
+
+The first couple lines of the store const will be necessary for the next section, [Backend Listeners](#backend-listeners). These lines will set the store's state via a `set()` function with the rustState object, ensuring synchronization with the backend Rust state. The `Partial` type needs to be assigned to the interface since only a *partial* of the interface's properties gets updated (in this case, `state`), otherwise it will give a type error.
+
+For the `createStore()` function, we are passing in the store's interface and two parameters-- **set** and **get**. Set is for setters, get is for getters. Pass in whichever will be used. Past this chunk of code, write out the methods that will be used in this store.
+
+### Methods
+
+There are typically three types of methods that can be used in each store:
+
+- Setters - Updates the local UI state. Requires `set` to be passed into `createStore()`.
+- Getters - Fetches data from the backend. Requires `get` to be passed into `createStore()`.
+- TauRPC - Calls asynchronous backend procedures to modify a state.
+
+<!-- <ins> element is for underlining -->
+Here are some examples of each method type provided by our Mission Store. Do note that the actual implementation can heavily vary between stores. <ins>This is simply to give an idea of how it works, not a strict template for writing methods.</ins>
+
+```typescript
+export const exampleZustandStore = createStore<ExampleStore>((set, get) => ({
+  state: initialState
+
+  syncRustState: (rustState: ExamplesStruct) => {...
+  },
+
+  // Example of a setter method
+  setCurrentView: (view: ViewType) => {
+    set((state) => ({
+      view: {
+        ...state.view, // Spread the existing view state to retain other properties
+        currentView: view
+      } satisfies ViewState // Satisfies the ViewState type
+    }));
+  },
+
+  // Example of a getter method
+  getMissionData: (missionId: number) =>
+    get().state.missions.find((mission) => mission.mission_id === missionId),
+
+  // Example of a TauRPC method
+  startMission: async (missionId: number) => {
+    return await taurpc.mission.start_mission(missionId);
+  },
+}));
+```
+
+### Backend Listeners
 
 To retrieve data from TauRPC, we'll need to set up these two listeners.
 
@@ -41,8 +134,7 @@ To retrieve data from TauRPC, we'll need to set up these two listeners.
 ```typescript
 import {
   createTauRPCProxy,
-  exampleStruct,
-  ...
+  ExampleStruct
 } from "@/lib/bindings";
 
 // On initial page load, fetch the example data from the backend
@@ -58,11 +150,11 @@ taurpc.example.on_updated.on((data: exampleStruct) => {
 });
 ```
 
-We typically have a method to fetch data on the app's initialization, akin to `get_all_examples()`. The store will get the state of itself with `getState()` and synchronize the data pulled from the TauRPC backend with `syncRustState(data)`.
+In tandem with the `get_all_examples()` method mentioned earlier, the store will get the state of itself with `getState()` and synchronize the data pulled from the TauRPC backend with `syncRustState(data)`.
 
 Whenever the TauRPC data is updated, the store will also update its state via `.on_updated.on()`
 
-#### Subscribing
+### Subscribing
 
 At the bottom, we set up a subscription to listen for state changes so the store stays up-to-date.
 
@@ -76,6 +168,7 @@ exampleZustandStore.subscribe((newState) => {
 With the `.subscribe()` method, Zustand is listening for any changes to the state. When a change is found, it assigns the new state into the store.
 
 Lastly, we'll need this line at the bottom. This will be explained in [A Pitful of Zustand](#a-pitful-of-zustand).
+
 ```typescript
 export const exampleStore: DeepReadonly<ExampleStore> =
   reactive(exampleZustandStore.getState());
@@ -106,6 +199,9 @@ Our frontend framework, Vue, is **_reactive_**, meaning the UI automatically upd
 At the very bottom of each store, we will include this code:
 
 ```typescript
+import { DeepReadonly, reactive } from "vue";
+import { ExampleStore } from "@/lib/MissionStore.types"; // Interface of the store
+
 export const exampleStore: DeepReadonly<ExampleStore> = 
   reactive(exampleZustandStore.getState());
 ```
