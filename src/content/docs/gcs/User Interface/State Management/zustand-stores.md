@@ -30,8 +30,6 @@ The Map Store is strictly responsible for updating the zones visually, so it is 
 
 This guide will assume there is already a backend API set up. At the very least, a `types.rs` file (which you can find under `src-tauri/src/[api name]`). For examples of stores, please refer to the **Implementation** section in the sidebar.
 
-Fair warning, stores can be a bit tricky to figure out! Do not hesistate to ask the UI team for help!
-
 ### Initialization
 
 First, create a store file called `[store name].ts` file under `src/components/lib`. We'll need to import some dependencies.
@@ -63,7 +61,7 @@ const taurpc = createTauRPCProxy();
 const initialState: ExamplesStruct = await taurpc.example.get_all_examples();
 ```
 
-For initial state, there is usually an exposed function from the backend that will fetch all necessary states for your store/struct. Notice how the `get_all_examples()` function is being accessed via the `taurpc` const.
+For initial state, there is usually an exposed function from the backend that will fetch all necessary states for your store/struct. Notice how the `get_all_examples()` function is being accessed via the `taurpc` constant.
 
 Now the store can be created.
 
@@ -82,20 +80,14 @@ export const exampleZustandStore = createStore<ExampleStore>((set, get) => ({
 }));
 ```
 
-The first couple lines of the store const will be necessary for the next section, [Backend Listeners](#backend-listeners). These lines will set the store's state via a `set()` function with the rustState object, ensuring synchronization with the backend Rust state. The `Partial` type needs to be assigned to the interface since only a *partial* of the interface's properties gets updated (in this case, `state`), otherwise it will give a type error.
-
-For the `createStore()` function, we are passing in the store's interface and two parameters-- **set** and **get**. Set is for setters, get is for getters. Pass in whichever will be used. Past this chunk of code, write out the methods that will be used in this store.
+The first couple lines of the store constant will be necessary for the [Backend Listeners](#backend-listeners) section, and therefore will be covered later. These lines will set the store's state via a `set()` function with the `rustState` object, ensuring synchronization with the backend Rust state. The `Partial` type needs to be assigned to the interface since only a *partial* of the interface's properties gets updated (in this case, `state`), otherwise it will give a type error.
 
 ### Methods
 
-There are typically three types of methods that can be used in each store:
-
-- Setters - Updates the local UI state. Requires `set` to be passed into `createStore()`.
-- Getters - Fetches data from the backend. Requires `get` to be passed into `createStore()`.
-- TauRPC - Calls asynchronous backend procedures to modify a state.
+For the `createStore()` function, we are passing in the store's interface and two parameters-- **set** and **get**. `set()` is used to *set* the local UI state. `get()` is used to *get* data from the backend. Pass in whichever method will be used. Past this chunk of code and within the store constant, write out the methods that will be used in this store.
 
 <!-- <ins> element is for underlining -->
-Here are some examples of each method type provided by our Mission Store. Do note that the actual implementation can heavily vary between stores. <ins>This is simply to give an idea of how it works, not a strict template for writing methods.</ins>
+Here are some examples of methods used by our Mission Store. Do note that the actual implementation can heavily vary between stores. <ins>This is simply to give an idea of how some methods work, not a strict template for writing methods.</ins> 
 
 ```typescript
 export const exampleZustandStore = createStore<ExampleStore>((set, get) => ({
@@ -104,8 +96,8 @@ export const exampleZustandStore = createStore<ExampleStore>((set, get) => ({
   syncRustState: (rustState: ExamplesStruct) => {...
   },
 
-  // Example of a setter method
   setCurrentView: (view: ViewType) => {
+    // Set the View state
     set((state) => ({
       view: {
         ...state.view, // Spread the existing view state to retain other properties
@@ -114,16 +106,38 @@ export const exampleZustandStore = createStore<ExampleStore>((set, get) => ({
     }));
   },
 
-  // Example of a getter method
   getMissionData: (missionId: number) =>
+    // Get mission data from the backend
     get().state.missions.find((mission) => mission.mission_id === missionId),
 
-  // Example of a TauRPC method
   startMission: async (missionId: number) => {
+    // Calls method in the backend to start mission
     return await taurpc.mission.start_mission(missionId);
   },
 }));
 ```
+
+TauRPC can also be used to call backend methods asynchronously.
+
+While the Mission Store seperates the `set()`, `get()`, and TauRPC calls, other stores do not not have to follow this format. The logic used in each method can be mixed together or seperated, depending on what approach we want to take. This example from our Map Store utilizes both `set()` and `get()` in one method.
+
+```typescript
+const mapStore = createStore<MapStore>((set, get) => ({
+  ...
+  updateMapRef: (refValue: LeafletMapGeoman | null) => {
+    const mapLeaflet = refValue?.leafletObject;
+    if (!mapLeaflet) return;
+
+    set({ map: refValue });
+    // Assign preInitialized geoJSON to the map
+    get().layers.addTo(mapLeaflet);
+    get().updateLayerTracking(missionStore.state as MissionsStruct);
+  },
+  ...
+}));
+```
+
+The key takeaways from this section are that stores allow the use of `set()` and `get()` to set the local UI state and to get data from the backend, respectively. In addition, the logic in each methods can be mixed and matched. Do not feel limited to how the methods are written in the given examples.
 
 ### Backend Listeners
 
