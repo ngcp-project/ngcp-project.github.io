@@ -1,11 +1,15 @@
 ---
-title: GCS Infrastructure
+title: Infrastructure Overview
 description: Home page for Infrastructure team documentation.
 sidebar:
     order: 4
 ---
 
 Documentation for the GCS Infrastructure team.
+
+:::caution[Caution]
+The infrastructure documentation may be outdated. The in-code documentation can be referenced to get more up-to-date information about the API.
+:::
 
 ## Communication Libraries
 <!-- Libraries? Maybe there will be another one made for future iterations of this project :O -->

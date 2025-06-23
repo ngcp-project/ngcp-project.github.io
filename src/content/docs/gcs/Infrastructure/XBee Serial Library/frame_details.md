@@ -36,8 +36,9 @@ Always set to **7E** in XBee API Mode
 ### Length (2 bytes)
 Number of bytes between Length and Checksum fields
 
-> [!Note]
-> The maximum length should be `00 6F` or `111` bytes ([See RF data](#rf-data-0---256-bytes))
+:::note[Note]
+The maximum length should be `00 6F` or `111` bytes ([See RF data](#rf-data-0---256-bytes))
+:::
 
 ### Frame Type (1 byte)
 Specefies XBee API frame type (0x00)
@@ -55,9 +56,10 @@ Use `00 00 00 00 00 00 FF FF` to send a broadcast packet.
 ### RF Data (0 - 256 bytes)
 Packet payload, up to **256** bytes (256 characters)
 
-> [!Important]
-> Although it is stated that the packet payload can be 0 - 256 bytes, the packet payload can only be up to **100** bytes (100 characters)
->
+:::note[Warning]
+Although it is stated that the packet payload can be 0 - 256 bytes, the packet payload can only be up to **100** bytes (100 characters)
+:::
+
 ![Xbee Maximum Packet Payload Length](./images/XBee%20Maximum%20Packet%20Payload%20Length.png)
 
 ### Checksum (1 byte)
@@ -270,8 +272,9 @@ Always set to **7E** in XBee API Mode
 ### Length (2 bytes)
 Number of bytes between Length and Checksum fields
 
-> [!Note]
-> The maximum length should be `00 69` or `105` bytes
+:::note[Note]
+The maximum length should be `00 69` or `105` bytes
+:::
 
 ### Frame Type (1 byte)
 Specefies XBee API frame type (0x81)
@@ -280,8 +283,9 @@ Specefies XBee API frame type (0x81)
 16-bit network address of the sender device.
 Can be set in XTCU (Parameter **MM**).
 
-> [!Note]
-> Set to `FF FE` if the sender's 16-bit address is unknown
+:::note[Note]
+Set to `FF FE` if the sender's 16-bit address is unknown
+:::
 
 ### Received Signal Strength Indicator (RSSI) (1 byte)
 Hexadecimal equivalent of (-dBm) value.

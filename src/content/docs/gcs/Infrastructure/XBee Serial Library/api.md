@@ -12,8 +12,9 @@ API for the XBee serial library
 
 Configure the serial port
 
-> [!NOTE]
-> Serial ports are not opened on object creation.
+:::note[Note]
+Serial ports are not opened on object creation.
+:::
 
 <br>
 
@@ -121,8 +122,10 @@ Check for incomming data
 
 <br>
 
-> [!NOTE]
-> The below methods are used by GCS for testing.
+:::note[Note]
+The below methods are used by GCS for testing.
+:::
+
 
 
 > ```py
@@ -149,8 +152,9 @@ Request and retrieve configuration detail of XBee device.
 > read_config(self, filename)
 > ```
 
-> [!Warning]
-> This method will be completely rewritten.
+:::caution[Caution]
+This method will be completely rewritten.
+:::
 
 This method reads a config file and executes AT commands to retrieve configuration data of an XBee module. All returned data is written to a log file.
 
