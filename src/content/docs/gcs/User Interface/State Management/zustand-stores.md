@@ -22,9 +22,7 @@ For some quick context, we use a map to designate zones for the vehicle's area o
 
 ![State Management Diagram](../assets/Map-Mission-Store-Diagram.webp)
 
-The Map Store is strictly responsible for updating the zones visually, so it is not responsible for updating the data of the zonse. To do the latter, we use the methods in the Mission Store to update the zones data to our Rust backend. Hence, there is a layer of abstraction where methods from one store are being called by methods in another store.
-
-[Matthew can elaborate more on this]
+The Map Store is strictly responsible for updating the zones visually, so it is not responsible for updating the data of the zones. To do the latter, we use the methods in the Mission Store to update the zones data to our Rust backend. Hence, there is a layer of abstraction where methods from one store are being called by methods in another store.
 
 ## Creating a Store
 
@@ -46,7 +44,7 @@ import { ExampleStore } from "@/lib/MissionStore.types"; // #4
 **#2** is used in a workaround to make Zustand reactive. Refer to [A Pitfall of Zustand](#a-pitfall-of-zustand).
 
 **#3** is for initializing the store.  
-- `createTauRPCProxy` is a function that creates a proxy for **TauRPC**, our backend Tauri API library. This allows the frontend to easily call backend functions as if they were local functions through a TypeScript API, while abstracting away the **remote procedure call (RPC)** details.  
+- `createTauRPCProxy` is a function that creates a proxy for **TauRPC**, our backend Tauri API library. This allows the frontend to perform **remote procedure calls (RPC)**, which call backend functions as if they were local functions through a TypeScript API. This also abstracts away the boilerplate necessary for the frontend-backend communication.  
 - `ExampleStruct` is the struct being used to store states in the API. Refer to the associated `types.rs` file to figure out which structs to import.  
 
 **#4** is the interface of your store. Refer to [Typing](#typing).
@@ -80,7 +78,7 @@ export const exampleZustandStore = createStore<ExampleStore>((set, get) => ({
 }));
 ```
 
-The first couple lines of the store constant will be necessary for the [Backend Listeners](#backend-listeners) section, and therefore will be covered later. These lines will set the store's state via a `set()` function with the `rustState` object, ensuring synchronization with the backend Rust state. The `Partial` type needs to be assigned to the interface since only a *partial* of the interface's properties gets updated (in this case, `state`), otherwise it will give a type error.
+This part of the store definition will be necessary for the [Backend Listeners](#backend-listeners). The store's state is set via a `set()` function with the `rustState` object, ensuring synchronization with the backend Rust state. The `Partial` type needs to be assigned to the interface since only a *partial* of the interface's properties gets updated (in this case, `state`), otherwise it will give a type error.
 
 ### Methods
 
