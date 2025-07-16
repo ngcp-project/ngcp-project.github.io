@@ -9,27 +9,24 @@ User Interface documentation for the 2024-2025 year.
 
 ## Table of Contents
 
-### State Management
+### UI Components
 
-Learn how to syncrhonize states between our backend and frontend via Zustand stores.
-
-- [Zustand Stores](./state-management/zustand-stores)
-
-  #### Implementation
-  - [Mission](./state-management/implementation/mission-frontend)
-  - [Telemetry](./state-management/implementation/telemetry-frontend)
-
-<!-- ### UI Components
-
-Documentation for various Vue components.
+Learn how certain Vue components used for our user interface work.
 
 - [Error Toast](./ui-components/error-toast)
 
-### Sidecars
+### State Management
 
-Learn how to embed external binaries at runtime via Tauri's sidecars.
+Learn how to synchronize states between our backend and frontend via Zustand stores.
 
-- [Tauri Sidecar](./sidecars/tauri-sidecar)
+- [Zustand Stores](./state-management/zustand-stores)
+- [Map](./state-management/map-frontend)
+- [Mission](./state-management/mission-frontend)
+- [Telemetry](./state-management/telemetry-frontend)
 
-  #### Implementation
-  - [FPV Camera Server](./sidecars/implementation/fpv-camera-server) -->
+### Embedding External Binaries
+
+Learn how to bundle external binaries with the application during the build process.
+
+- [Sidecars](./embedding-external-binaries/sidecars)
+- [FPV Camera Server](./embedding-external-binaries/fpv-camera)
