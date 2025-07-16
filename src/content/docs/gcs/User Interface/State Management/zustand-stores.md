@@ -30,9 +30,10 @@ This guide will assume there is already a backend API set up. At the very least,
 
 ### Initialization
 
-First, create a store file called `[store name].ts` file under `src/components/lib`. We'll need to import some dependencies.
+First, create a store file called `[store name].ts` file under `src/lib`. We'll need to import some dependencies.
 
 ```typescript
+// src/lib/ExampleStore.ts
 import { createStore } from "zustand/vanilla"; // #1
 import { DeepReadonly, reactive } from "vue"; // #2
 import { createTauRPCProxy, ExampleStruct } from "@/lib/bindings"; // #3
@@ -52,6 +53,7 @@ import { ExampleStore } from "@/lib/MissionStore.types"; // #4
 Right after the imports, we will use the following two lines to initialize the TauRPC proxy and the initial state of our store.
 
 ```typescript
+// src/lib/ExampleStore.ts
 // Create TauRPC proxy
 const taurpc = createTauRPCProxy();
 
@@ -64,6 +66,7 @@ For initial state, there is usually an exposed function from the backend that wi
 Now the store can be created.
 
 ```typescript
+// src/lib/ExampleStore.ts
 export const exampleZustandStore = createStore<ExampleStore>((set, get) => ({
   state: initialState
 
@@ -88,6 +91,7 @@ For the `createStore()` function, we are passing in the store's interface and tw
 Here are some examples of methods used by our Mission Store. Do note that the actual implementation can heavily vary between stores. <ins>This is simply to give an idea of how some methods work, not a strict template for writing methods.</ins> 
 
 ```typescript
+// src/lib/ExampleStore.ts
 export const exampleZustandStore = createStore<ExampleStore>((set, get) => ({
   state: initialState
 
@@ -120,6 +124,7 @@ TauRPC can also be used to call backend methods asynchronously.
 While the Mission Store seperates the `set()`, `get()`, and TauRPC calls, other stores do not not have to follow this format. The logic used in each method can be mixed together or seperated, depending on what approach we want to take. This example from our Map Store utilizes both `set()` and `get()` in one method.
 
 ```typescript
+// src/lib/MapStore.ts
 const mapStore = createStore<MapStore>((set, get) => ({
   ...
   updateMapRef: (refValue: LeafletMapGeoman | null) => {
@@ -144,6 +149,7 @@ To retrieve data from TauRPC, we'll need to set up these two listeners.
 **IMPORTANT**: Never use `.setState()` directly as to modify the state property it can cause desync issues. Instead, use `.syncRustState()`.
 
 ```typescript
+// src/lib/ExampleStore.ts
 import {
   createTauRPCProxy,
   ExampleStruct
@@ -171,6 +177,7 @@ Whenever the TauRPC data is updated, the store will also update its state via `.
 At the bottom, we set up a subscription to listen for state changes so the store stays up-to-date.
 
 ```typescript
+// src/lib/ExampleStore.ts
 exampleZustandStore.subscribe((newState) => {
   Object.assign(exampleStore, newState);
   console.log('Example Zustand Store updated', exampleStore);
@@ -182,6 +189,7 @@ With the `.subscribe()` method, Zustand is listening for any changes to the stat
 Lastly, we'll need this line at the bottom. This will be explained in [A Pitfall of Zustand](#a-pitfall-of-zustand).
 
 ```typescript
+// src/lib/ExampleStore.ts
 export const exampleStore: DeepReadonly<ExampleStore> =
   reactive(exampleZustandStore.getState());
 ```
@@ -193,6 +201,7 @@ As per usual with TypeScript, we need to define the types and interfaces used in
 Main takeaway is to export an interface of the store, with type definitions for each method used. We'll also need to define the type of the backend state used in the Store.
 
 ```typescript
+// src/lib/ExampleStore.types.ts
 export interface ExampleStore {
   state: ExampleStruct;
   syncRustState: (state: ExampleStruct) => void;
@@ -211,6 +220,7 @@ Our frontend framework, Vue, is **_reactive_**, meaning the UI automatically upd
 At the very bottom of each store, we will include this code:
 
 ```typescript
+// src/lib/ExampleStore.ts
 import { DeepReadonly, reactive } from "vue";
 import { ExampleStore } from "@/lib/MissionStore.types"; // Interface of the store
 
@@ -223,6 +233,7 @@ We are recreating and then exporting the store by wrapping the store's current s
 There is one more thing that needs to be added to whatever Vue component we are using the store in. We'll be using `MapSidebar.vue` component as an example. This component will read states from `MissionStore.ts`.
 
 ```vue
+// src/components/MapSidebar.vue
 <script>
   import { computed } from "vue";
   import { missionStore } from "@/lib/MissionStore";
