@@ -6,7 +6,7 @@ sidebar:
 
 **Zustand** is a state management library used as our solution to synchronizing states between the backend (TauRPC & RabbitMQ) and the frontend (Vue.js). Everything discussed in the following sections will be primarily focused on the frontend side.
 
-Currently, we are using this for [Map](../implementation/map-frontend), [Mission](../implementation/mission-frontend), and [Telemetry](../implementation/telemetry-frontend). Check out the respective pages for documentation on the state management for vehicle missions and vehicle telemetry.
+Currently, we are using this for [Map](../implementation/map-frontend), [Mission](../implementation/mission-frontend), and [Telemetry](../implementation/telemetry-frontend).
 
 The following diagram provides an overview of how state management works on the frontend.
 
@@ -26,7 +26,7 @@ The Map Store is strictly responsible for updating the zones visually, so it is 
 
 ## Creating a Store
 
-This guide will assume there is already a backend API set up. At the very least, a `types.rs` file (which you can find under `src-tauri/src/[api name]`). For examples of stores, please refer to the **Implementation** section in the sidebar.
+This guide will assume there is already a backend API set up. At the very least, a `types.rs` file (which you can find under `src-tauri/src/[api name]`).
 
 ### Initialization
 
