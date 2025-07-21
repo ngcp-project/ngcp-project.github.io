@@ -6,7 +6,7 @@ sidebar:
 
 **Zustand** is a state management library used as our solution to synchronizing states between the backend (TauRPC & RabbitMQ) and the frontend (Vue.js). Everything discussed in the following sections will be primarily focused on the frontend side.
 
-Currently, we are using this for [Map](../implementation/map-frontend), [Mission](../implementation/mission-frontend), and [Telemetry](../implementation/telemetry-frontend).
+Currently, we are using this for [Map](../map-frontend), [Mission](../mission-frontend), and [Telemetry](../telemetry-frontend).
 
 The following diagram provides an overview of how state management works on the frontend.
 
