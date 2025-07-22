@@ -2,13 +2,15 @@
 title: Cameras
 ---
 
+The `Cameras.vue` component is used to display camera feed provided by the [FPV camera server](../../embedding-external-binaries/fpv-camera-server).
+
 This component uses the [Card](https://www.shadcn-vue.com/docs/components/card.html), [Carousel](https://www.shadcn-vue.com/docs/components/carousel.html), and [Skeleton](https://www.shadcn-vue.com/docs/components/skeleton.html) components from [shadcn/vue](https://www.shadcn-vue.com/docs/introduction.html).
 
 ## Features
 
 - 4:3 aspect ratio camera views which fit the actual camera resolutions.
 - Placeholder skeleton for cameras if there is no feed (aka the camera server is not running).
-- [Two camera layouts](#camera-layouts)
+- [Two camera layouts](#camera-layouts).
 
 ### Camera Layouts
 
