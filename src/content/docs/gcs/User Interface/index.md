@@ -13,6 +13,7 @@ User Interface documentation for the 2024-2025 year.
 
 Learn how certain Vue components used for our user interface work.
 
+- [Cameras](./ui-components/cameras)
 - [Error Toast](./ui-components/error-toast)
 
 ### State Management
