@@ -1,4 +1,4 @@
----
+{/* ---
 title: Example Embedded Component
 ---
 import { Code } from '@astrojs/starlight/components';
@@ -10,4 +10,7 @@ Example test component
 
 <Test label="test" />
 
-<Code code={TestCode} lang="vue" title='./components/test.component.vue'/>
+<Code code={TestCode} lang="vue" title='./components/test.component.vue'/> 
+
+** ADD . BEFORE MDX TO USE ** */}
+
