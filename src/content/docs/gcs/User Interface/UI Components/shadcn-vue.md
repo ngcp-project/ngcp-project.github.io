@@ -1,5 +1,5 @@
 ---
-title: Shadcn Components
+title: shadcn/vue
 sidebar:
   order: 3
 ---
