@@ -32,3 +32,9 @@ Learn how to bundle external binaries with the application during the build proc
 
 - [Sidecars](./embedding-external-binaries/sidecars)
 - [FPV Camera Server](./embedding-external-binaries/fpv-camera)
+
+## Demo Day 
+
+For a visual of the User Interface in action, check out the 2024-2025 Demo Day recordings.
+
+[Part 1](https://youtu.be/hWrshAnqU7k?si=-gDGsa-l9ElE-Cla) | [Part 2](https://youtu.be/ADPfVVWi9rs?si=g7kCkTnSg2Ifr4Br)
