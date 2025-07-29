@@ -16,7 +16,6 @@ This component uses the [Card](https://www.shadcn-vue.com/docs/components/card.h
 
 #### Carousel
 
-Heavily inspired by Discord's call layout.  
 Click the small camera or **thumbnail** to switch places with the enlarged camera.
 
 [Camera Off Preview](#carousel-camera-off) | [Camera On Preview](#carousel-camera-on)
@@ -29,9 +28,7 @@ Click the enlarged camera to switch layouts.
 
 #### Implementation
 
-The styling isn't particularly great but it gets the job done.
-
-Both layouts exist at once, but are rendered based on a v-if statement. The string reference `layout.value` will store which layout is currently selected.
+Both camera layouts exist at once, but are rendered based on a v-if statement. The string reference `layout.value` will store which layout is currently selected.
 
 The FPV camera server repeatedly outputs an image, so we use an `img` tag to display the camera. If the server is offline (if `v-if="feed.src"` is false), a Skeleton component takes up the space where the camera feed should be.
 
