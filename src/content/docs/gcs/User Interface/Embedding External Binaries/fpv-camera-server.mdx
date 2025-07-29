@@ -1,0 +1,48 @@
+---
+title: FPV Camera Server
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import { Steps } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="This feature has not been fully implemented!">
+  The code discussed in this documentation has not yet been merged into main, and may be incomplete or highly subject to change.
+</Aside>
+
+The `opencv.py` binary (located in `src-tauri`) creates a Flask server which streams first-person-view camera feeds from the vehicles via OpenCV.
+
+In the future, we may opt for a different solution for streaming camera feeds to the GCS.
+
+## Compiling
+
+You'll need Python/pip.
+
+<Steps>
+
+1. Install dependencies.
+
+   ```
+   pip install flask
+   pip install opencv-python
+   pip pyinstaller
+   ```
+
+2. Use pyinstaller to compile the `opencv.py` file into a sidecar.
+
+   ```
+   pyinstaller --onefile .\src-tauri\opencv.py --distpath .\src-tauri\binaries\
+   ```
+
+3. Ensure the opencv sidecar is in the `dist` folder. Move the sidecar into `binaries` folder (if there is already a file, replace it).
+
+4. Run the Node.js script to rename the sidecar file, as you must add your architecture to the file name.
+
+   ```
+   bun run target:triple
+   ```
+
+   Refer to the next section for more details on what this script is.
+  
+</Steps>
+
+Now the FPV camera server should run with `bun tauri dev`. It takes time for it to spin up and once it does, make sure you refresh the camera window.
