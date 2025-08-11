@@ -16,7 +16,7 @@ For more information:
 - Queues: Separate message channels for different vehicle types or functions
 - Exchange: Routes messages to appropriate vehicle queues
      
-![alt text](image.png)
+![alt text](image2.png)
 
 ### Benefits:
 - Each vehicle has its own data queue,no mixing data
