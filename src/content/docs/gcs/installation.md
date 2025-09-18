@@ -35,7 +35,11 @@ bun run osm:setup
 
 4. The osm-setup command IS SUPPOSED TO TAKE A WHILE TO INSTALL. If it isn't, please end the process and try again.
 
-5. After the setup is complete, run the PostGreSQL and RabbitMQ containers using docker-compose
+<img width="1902" height="1436" alt="image" src="https://github.com/user-attachments/assets/ade11f07-2366-4af7-aa74-a0ee21c75bec" />
+
+
+
+6. After the setup is complete, run the PostGreSQL and RabbitMQ containers using docker-compose
 ```bash
 docker-compose up db
 docker-compose up rabbitmq
