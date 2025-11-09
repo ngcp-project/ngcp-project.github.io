@@ -1,6 +1,6 @@
 ---
 title: Installing the GCS Repo 
-description: Updated as of 09/17/25
+description: Updated as of 11/09/25
 sidebar:
   order: 1
 ---
@@ -9,13 +9,22 @@ sidebar:
 This instructions are meant for users who are familiar with the repo and just need a quick refresher on how to install it. For more detailed instructions, please refer to the Detailed Instructions section below.
 > Note: If the map server fails to render properly (white screen), please refer to the Map Server Debugging Notes section below.
 
-### List of Commands needed to run in order (starting from `bun install` and ending at `bun tauri`)
+## Prerequisites Software
+- [Bun](https://bun.sh/)
+- [Rust](https://rust-lang.org/tools/install/)
+  - Note for Windows users: install the "Desktop development with C++" workload using the [Visual Studio Build Tools installer](https://visualstudio.microsoft.com/visual-cpp-build-tools/). 
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Optional but highly recommended: Docker VSCode Extension](https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-docker)
+
+
+
+## List of Commands needed to run in order (starting from `bun install` and ending at `bun tauri`)
 ```bash
 bun install
 bun run osm:setup
-bun run osm:run
 docker-compose up db
 docker-compose up rabbitmq
+bun run osm:run
 bun tauri
 ```
 
@@ -23,7 +32,7 @@ bun tauri
 
 
 ## Detailed Instructions
-1. Clone the repo
+1. Clone the [User Interface Repository](https://github.com/ngcp-project/gcs-user-interface)
 2. Install the Frontend dependencies using bun (ideal package manager but npm also works)
 ```bash
 bun install
@@ -49,10 +58,12 @@ docker-compose up rabbitmq
 
 6. IMPORTANT NOTE: Please do not run `docker-compose up` as it will run all containers and cause the map server to fail. Follow the steps above to ensure proper installation.
 
-7. To run the entire GCS application, ensure that the osm-server, PostGreSQL, and RabbitMQ containers are running. Run the application using:
+7. To run the entire GCS application, ensure that the osm-server, PostGreSQL, and RabbitMQ containers are running. Run the application using these commands in separate terminal windows:
 ```bash
+bun run osm:run
 bun tauri
 ```
+> Note: `bun run osm:run` starts the map server while `bun tauri` starts the desktop application.
 
 
 ## Map Server Debugging Notes
@@ -64,3 +75,11 @@ bun tauri
   - Start the PostGreSQL and RabbitMQ containers only
   - Run the map server using `bun tauri`
 - There is a difference between running the osm:setup script vs the docker-compose up osm-setup. In the underlying code for osm:setup, it is docker-compose run while docker-compose up runs all containers. This is why it is important to run the setup script and not the docker-compose command.
+
+
+## Rust Debugging Notes
+- For Windows users, if you encounter issues with Rust during the Tauri build process, ensure that you have the "Desktop development with C++" workload installed via the [Visual Studio Build Tools installer](https://visualstudio.microsoft.com/visual-cpp-build-tools/). This is necessary for compiling native dependencies.
+
+
+## Docker Debugging Notes
+- If `docker-compose` is not working, remove the hyphen and try `docker compose` instead.

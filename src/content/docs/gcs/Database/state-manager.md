@@ -1,5 +1,5 @@
 ---
-title: Stage Manager
+title: State Manager
 description: Technical documentation of Rust State Manager
 ---
 
