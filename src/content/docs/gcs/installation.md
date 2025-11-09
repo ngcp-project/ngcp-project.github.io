@@ -78,6 +78,8 @@ bun tauri
 
 
 ## Rust Debugging Notes
+<img width="660" height="279" alt="image" src="https://github.com/user-attachments/assets/4371b295-4887-4167-8583-c27984bdfaba" />
+
 - For Windows users, if you encounter issues with Rust during the Tauri build process, ensure that you have the "Desktop development with C++" workload installed via the [Visual Studio Build Tools installer](https://visualstudio.microsoft.com/visual-cpp-build-tools/). This is necessary for compiling native dependencies.
 
 
