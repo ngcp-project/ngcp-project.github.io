@@ -4,7 +4,7 @@ sidebar:
   order: 1
 ---
 
-> Note: This guide assumes that you have installed the GCS application and have it set up correctly. If you haven't done so, please refer to the [Installation Guide](./installation.md).
+> Note: This guide assumes that you have installed the GCS application and have it set up correctly. If you haven't done so, please refer to the [Installation Guide](installation).
 
 
 ## Preparing to Run GCS
@@ -29,3 +29,4 @@ bun run osm:run
 bun tauri
 
 ```
+
