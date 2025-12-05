@@ -8,54 +8,52 @@ The Mission Store is responsible for managing the states of data related to vehi
 
 ```ts
 // src/lib/MissionStore.types.ts
-export type ViewType = 'mission' | 'vehicle' | 'stage' | 'zone';
+export type ViewType = "mission" | "vehicle" | "stage" | "zone";
 export interface ViewState {
   currentView: ViewType;
   currentMissionId: number | null;
   currentVehicleName: VehicleEnum | null;
   currentStageId: number | null;
 }
+```
 
-export interface MissionStore {
-  // Backend State
-  state: MissionsStruct;
-  syncRustState: (state: MissionsStruct) => void;
+## Functions
+Where with the following schema: `const functionName: (parameter: parameterType, ...) => returnType`:
+```ts
 
-  // Frontend State
-  view: ViewState;
-
-  // METHODS
+  // Backend state
+  const syncRustState: (state: MissionsStruct) => void;
 
   // Frontend State
-  setCurrentView: (view: ViewType) => void;
-  setCurrentMissionID: (missionId: number | null) => void;
-  setCurrentVehicleName: (vehicleName: VehicleEnum | null) => void;
-  setCurrentStageID: (stageId: number | null) => void;
+  const setCurrentView: (view: ViewType) => void;
+  const setCurrentMissionID: (missionId: number | null) => void;
+  const setCurrentVehicleName: (vehicleName: VehicleEnum | null) => void;
+  const setCurrentStageID: (stageId: number | null) => void;
 
   // Mission Data
-  getAllMissions: () => MissionStruct[];
-  getMissionData: (missionId: number) => MissionStruct | undefined;
-  renameMission: (missionId: number, missionName: string) => Promise<null>;
-  createNewMission: (missionName: string) => Promise<null>;
-  deleteMission: (missionId: number) => Promise<null>;
-  startMission: (missionId: number) => Promise<null>;
+  const getAllMissions: () => MissionStruct[];
+  const getMissionData: (missionId: number) => MissionStruct | undefined;
+  const renameMission: (missionId: number, missionName: string) => Promise<null>;
+  const createNewMission: (missionName: string) => Promise<null>;
+  const deleteMission: (missionId: number) => Promise<null>;
+  const startMission: (missionId: number) => Promise<null>;
 
   // Vehicle Data
-  getVehicleData: (missionId: number, vehicleName: VehicleEnum) => VehicleStruct | undefined;
-  setAutoMode: (missionId: number, vehicleName: VehicleEnum, isAuto: boolean) => Promise<null>;
+  const getVehicleData: (missionId: number, vehicleName: VehicleEnum) => VehicleStruct | undefined;
+  const setAutoMode: (missionId: number, vehicleName: VehicleEnum, isAuto: boolean) => Promise<null>;
 
   // Stage Data
-  getStageData: (missionId: number, vehicleName: VehicleEnum, stageId: number) => StageStruct | undefined;
-  addStage: (missionId: number, vehicleName: VehicleEnum) => Promise<null>;
-  deleteStage: (missionId: number, vehicleName: VehicleEnum, stageId: number) => Promise<null>;
-  renameStage: (missionId: number, vehicleName: VehicleEnum, stageId: number, stageName: string) => Promise<null>;
-  transitionStage: (missionId: number, vehicleName: VehicleEnum) => Promise<null>;
-  updateStageArea: (missionId: number, vehicleName: VehicleEnum, stageId: number, area: GeoCoordinateStruct[]) => Promise<null>;
+  const getStageData: (missionId: number, vehicleName: VehicleEnum, stageId: number) => StageStruct | undefined;
+  const addStage: (missionId: number, vehicleName: VehicleEnum) => Promise<null>;
+  const deleteStage: (missionId: number, vehicleName: VehicleEnum, stageId: number) => Promise<null>;
+  const renameStage: (missionId: number, vehicleName: VehicleEnum, stageId: number, stageName: string) => Promise<null>;
+  const transitionStage: (missionId: number, vehicleName: VehicleEnum) => Promise<null>;
+  const updateStageArea: (missionId: number, vehicleName: VehicleEnum, stageId: number, area: GeoCoordinateStruct[]) => Promise<null>;
 
   // Zone Data
-  getZoneData: (missionId: number, zoneType: ZoneType) => GeoCoordinateStruct[][] | undefined;
-  addZone: (missionId: number, zoneType: ZoneType) => Promise<null>;
-  updateZone: (missionId: number, zoneType: ZoneType, zoneIndex: number, polygon: GeoCoordinateStruct[]) => Promise<null>;
-  deleteZone: (missionId: number, zoneType: ZoneType, zoneIndex: number) => Promise<null>;
-}
+  const getZoneData: (missionId: number, zoneType: ZoneType) => GeoCoordinateStruct[][] | undefined;
+  const addZone: (missionId: number, zoneType: ZoneType) => Promise<null>;
+  const updateZone: (missionId: number, zoneType: ZoneType, zoneIndex: number, polygon: GeoCoordinateStruct[]) => Promise<null>;
+  const deleteZone: (missionId: number, zoneType: ZoneType, zoneIndex: number) => Promise<null>;
+
 ```
