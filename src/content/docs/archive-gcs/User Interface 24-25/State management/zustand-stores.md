@@ -1,6 +1,7 @@
 ---
 title: Zustand Stores
-
+sidebar:
+  order: 5
 ---
 
 **Zustand** is a state management library used as our solution to synchronizing states between the backend (TauRPC & RabbitMQ) and the frontend (Vue.js). Everything discussed in the following sections will be primarily focused on the frontend side.

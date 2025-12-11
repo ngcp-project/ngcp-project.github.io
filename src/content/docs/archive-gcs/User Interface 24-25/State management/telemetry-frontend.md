@@ -1,7 +1,7 @@
 ---
 title: Telemetry
 ---
-
+ 
 The Telemetry Store is responsible for managing the states of vehicle telemetry data, as well as their coordinates and map markers.
 
 ## Types and Interfaces
