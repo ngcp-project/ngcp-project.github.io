@@ -10,6 +10,16 @@ The origin of the map `DEFAULT_MAP_ORIGIN` is set to `(33.932573934575075, -117.
 
 ```ts
 // src/lib/MapStore.types.ts
+export interface MapState {
+  map: LeafletMapGeoman | null;
+  mapOrigin: LatLng;
+  markerCoord: LatLngExpression;
+  layers: L.FeatureGroup<L.Polygon>;
+  localTileURL: string;
+  layerTracking: LayerTracking;
+  vehicleMarkers: Record<VehicleEnum, LatLngExpression>;
+}
+
 export interface LayerProperties {
   color: string;
   visibility: boolean;
@@ -44,35 +54,34 @@ export interface LayerTracking {
 
 export type LeafletMap = InstanceType<typeof LMap>;
 export interface LeafletMapGeoman extends LeafletMap {
-  leafletObject: LeafletMap['leafletObject'] & L.Map;
+  leafletObject: LeafletMap["leafletObject"] & L.Map;
 }
+```
 
-export interface MapStore {
-  map: LeafletMapGeoman | null;
-  mapOrigin: LatLng;
-  markerCoord: LatLngExpression;
-  layers: L.FeatureGroup<L.Polygon>;
-  localTileURL: string;
-  layerTracking: LayerTracking;
-  vehicleMarkers: Record<VehicleEnum, LatLngExpression>;
+## Functions
+
+Where with the following schema: `const functionName: (parameter: parameterType, ...) => returnType`:
+
+```ts
+
 
   // Map Management
-  updateMapRef: (ref: LeafletMapGeoman | null) => void;
-  toggleDrawMode: () => void;
-  rerenderLayers: () => void;
-  logMapStore: () => void;
-  updateVehicleMarker: (vehicle: VehicleEnum, lat: number, lng: number) => void;
-  updateMarkerCoords: (vehicle: VehicleEnum, coords: LatLngExpression) => void;
-  getVehicleMarkers: () => Record<VehicleEnum, LatLngExpression>;
+  const updateMapRef: (ref: LeafletMapGeoman | null) => void;
+  const toggleDrawMode: () => void;
+  const rerenderLayers: () => void;
+  const logMapStore: () => void;
+  const updateVehicleMarker: (vehicle: VehicleEnum, lat: number, lng: number) => void;
+  const updateMarkerCoords: (vehicle: VehicleEnum, coords: LatLngExpression) => void;
+  const getVehicleMarkers: () => Record<VehicleEnum, LatLngExpression>;
 
   // Layer Management
-  updateStagePolygon: (missionId: number, vehicle: VehicleEnum, stageId: number) => void;
-  updateZonePolygon: (missionId: number, type: ZoneType, zoneIndex: number) => void;
-  removeStageLayer: (missionId: number, vehicle: VehicleEnum, stageId: number) => void;
-  getStageLayer: (missionId: number, vehicle: VehicleEnum, stageId: number) => StageLayer | undefined;
-  getZoneLayers: (missionId: number, type: ZoneType) => ZoneLayer[];
-  setZoneLayerVisibility: (missionId: number, type: ZoneType, zoneIndex: number) => void;
-  setStageLayerVisibility: (missionId: number, vehicle: VehicleEnum, stageId: number) => void;
-  updateLayerTracking: (state: MissionsStruct) => void;
-}
+  const updateStagePolygon: (missionId: number, vehicle: VehicleEnum, stageId: number) => void;
+  const updateZonePolygon: (missionId: number, type: ZoneType, zoneIndex: number) => void;
+  const removeStageLayer: (missionId: number, vehicle: VehicleEnum, stageId: number) => void;
+  const getStageLayer: (missionId: number, vehicle: VehicleEnum, stageId: number) => StageLayer | undefined;
+  const getZoneLayers: (missionId: number, type: ZoneType) => ZoneLayer[];
+  const setZoneLayerVisibility: (missionId: number, type: ZoneType, zoneIndex: number) => void;
+  const setStageLayerVisibility: (missionId: number, vehicle: VehicleEnum, stageId: number) => void;
+  const updateLayerTracking: (state: MissionsStruct) => void;
+
 ```

@@ -21,7 +21,7 @@ Learn how certain Vue components used for our user interface work.
 
 Learn how to synchronize states between our backend and frontend via Zustand stores.
 
-- [Zustand Stores](./state-management/zustand-stores)
+- [Pinia Stores](./state-management/pinia-stores)
 - [Map](./state-management/map-frontend)
 - [Mission](./state-management/mission-frontend)
 - [Telemetry](./state-management/telemetry-frontend)

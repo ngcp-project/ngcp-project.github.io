@@ -4,21 +4,21 @@ title: Telemetry
 
 The Telemetry Store is responsible for managing the states of vehicle telemetry data, as well as their coordinates and map markers.
 
-## Types and Interfaces
 
+
+## Functions
+Where with the following schema: `const functionName: (parameter: parameterType, ...) => returnType`:
 ```ts
-// src/lib/TelemetryStore.types.ts
-export interface TelemetryStore {
+
   // Backend State
-  state: VehicleTelemetryData;
-  syncRustState: (state: VehicleTelemetryData) => void;
+  const syncRustState: (state: VehicleTelemetryData) => void;
 
   // Methods
-  updateVehicleMarkers: (state: VehicleTelemetryData) => void;
-  updateVehicleCoords: (vehicle: VehicleEnum, coords: LatLngExpression) => void;
+  const updateVehicleMarkers: (state: VehicleTelemetryData) => void;
+  const updateVehicleCoords: (vehicle: VehicleEnum, coords: LatLngExpression) => void;
   // simulateMovement: () => void;
 
   // Telemetry Data
-  getTelemetry: () => VehicleTelemetryData;
-}
+  const getTelemetry: () => VehicleTelemetryData; 
+
 ```
