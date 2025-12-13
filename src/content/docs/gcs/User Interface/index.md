@@ -9,6 +9,8 @@ User Interface documentation for the 2024-2025 year.
 
 ## Table of Contents
 
+- [Rust Modules Overview](./rust-modules)
+
 ### UI Components
 
 Learn how certain Vue components used for our user interface work.
