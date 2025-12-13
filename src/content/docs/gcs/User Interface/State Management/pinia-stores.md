@@ -10,7 +10,7 @@ Currently, we are using this for [Map](../map-frontend), [Mission](../mission-fr
 
 The following diagram provides an overview of how state management works on the frontend.
 
-![State Management Diagram](../assets/State-Management-Diagram.webp)
+![Pinia State Management Diagram](../assets/Pinia-State-Management-Diagram.webp)
 ## How it Works
 
 To use Pinia, we must first mount **app** with a **Pinia instance** in `main.ts` and before we can define **stores**:
@@ -32,7 +32,7 @@ One thing to note is that stores *can* communicate with each other. If the data-
 
 For some quick context, we use a map to designate zones for the vehicle's area of operations.
 
-![State Management Diagram](../assets/Map-Mission-Store-Diagram.webp)
+![Map and Mission Store Diagram](../assets/Map-Mission-Store-Diagram.webp)
 
 The Map Store is strictly responsible for updating the zones visually, so it is not responsible for updating the data of the zones. To do the latter, we use the methods in the Mission Store to update the zones data to our Rust backend. Hence, there is a layer of abstraction where methods from one store are being called by methods in another store.
 

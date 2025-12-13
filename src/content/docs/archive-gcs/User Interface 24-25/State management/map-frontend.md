@@ -1,7 +1,7 @@
 ---
 title: Map
 ---
- 
+   
 The Map Store is responsible for managing the states of the Leaflet map and keep-in keep-out zones.
 
 The origin of the map `DEFAULT_MAP_ORIGIN` is set to `(33.932573934575075, -117.63059569114814)`, which is where Demo Day and the [Pomona Valley Model Airplane Club (Prado Airpark)](https://maps.app.goo.gl/EM29k7wvYRPZL1Ee9) are located.
