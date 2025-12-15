@@ -16,7 +16,7 @@ All commands require a vehicle ID to be specified (in the case of the emergency 
 
 ## Mission
 
-This module handles the backend state of misssions. It exposes an API that allows you to add, rename, and delete missions, stages, and zones. You can also transition stages, update the stage area, set the auto mode of vehicles, get mission data, and start the mission. Additionally, whenever the mission data is changed, it'll fire an `on_updated` event containing the new data for the mission being updated. There also exists a function to get the default state for missions, though it currently appears unused.
+This module handles the backend state of missions. It exposes an API that allows you to add, rename, and delete missions, stages, and zones. You can also transition stages, update the stage area, set the auto mode of vehicles, get mission data, and start the mission. Additionally, whenever the mission data is changed, it'll fire an `on_updated` event containing the new data for the mission being updated. There also exists a function to get the default state for missions, though it currently appears unused.
 
 Currently, the [Mission Store](../state-management/mission-frontend) is responsibile for managing the state of missions on the frontend. The functions listed here call their rust module counterparts under-the-hood, so it is preferred that you use the [Mission Store functions](../state-management/mission-frontend#functions) when interacting with the Mission module. 
 
