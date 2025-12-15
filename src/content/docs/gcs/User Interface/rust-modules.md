@@ -1,5 +1,7 @@
 ---
 title: Rust Modules Overview
+sidebar:
+  order: 2
 ---
 
 Since we are developing this app using **Tauri**, the frontend has the ability to interact with Rust modules on the backend. This page briefly describes the function of these modules and how the UI interacts with them.
