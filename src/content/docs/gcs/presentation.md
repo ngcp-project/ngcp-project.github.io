@@ -12,6 +12,6 @@ sidebar:
 
 ## Common Mistakes and Pitfalls to Avoid
 - Overloading slides with text (make actual bullet points, not sentences)
-- Don't use periods
+- Don't use periods and write sentences
 - Assume the audience has poor eyesight: make fonts large enough to be seen from the back of the room
 - DON'T USE THE COLORS RED AND GREEN TOGETHER
