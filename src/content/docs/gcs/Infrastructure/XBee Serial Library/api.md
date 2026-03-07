@@ -35,7 +35,7 @@ A `Logger` instance will be created if it is not provided. You should only creat
 **Example:**
 
 ```py
-from Communication.XBee.XBee import XBee
+from xBee import XBee
 
 PORT = "/dev/cu.usbserial-D30DWZKT"
 BAUD_RATE = 115200
