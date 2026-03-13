@@ -23,7 +23,7 @@ A separate `AlertTestButtons.vue` component provides placeholder buttons for gen
 The alert system is split into two components:
 
 - **`AlertToast.vue`** — Listens for Tauri events, manages toast state, renders the toast stack. Contains no test UI.
-- **`AlertTestButtons.vue`** — A development-only component with buttons that emit toast events for testing. Import it in `App.vue` during development and remove it before shipping.
+- **`AlertTestButtons.vue`** — A development-only component with buttons that emit toast events for testing. These buttons can be toggled via a developer flag titled **VITE_ERROR_TOAST_DEBUG** in .env 
 
 ```vue
 <!-- src/App.vue -->
