@@ -17,7 +17,7 @@ Learn how certain Vue components used for our user interface work.
 
 - [shadcn/vue](./ui-components/shadcn-vue)
 - [Cameras](./ui-components/cameras)
-- [Error Toast](./ui-components/error-toast)
+- [Alert Toast](./ui-components/error-toast)
 
 ### State Management
 
