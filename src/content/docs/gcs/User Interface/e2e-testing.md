@@ -16,9 +16,11 @@ One of the challenges we faced was that the default Tauri build command called t
 
 Another challenge was that some tests would attempt to find elements before they were fully loaded, such as before the page loaded or immediately after an action was performed. This was solved by making the webdriver pause briefly upon doing any actions that don't update immediately (such as adding a new mission) before continuing.
 
-### System Support
+### System Support & GitHub Actions
 
-Right now, `tauri-driver` only supports Windows and Linux systems; it does not support macOS. We are exploring options to get the webdriver working on macOS systems.
+Right now, `tauri-driver` only supports Windows and Linux systems; it does not support macOS.
+
+The test suite also runs on GitHub's runners every time a commit is pushed to the repository. It only runs on a Linux runner, as GitHub's Windows runners do not support running Linux containers due to a lack of nested virtualization support.
 
 ## Writing Tests
 
