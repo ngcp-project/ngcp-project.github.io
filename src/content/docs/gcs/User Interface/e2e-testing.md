@@ -70,7 +70,7 @@ A major part of writing tests consists of getting elements from the page, doing 
 	- `expect(foo).to.be.greaterThan(bar);` - test that a given value `foo` is greater than another value `bar`
 - Finding Elements
 	- `const element = await driver.findElement(By.css('.foo'));` - get the first element matching the given CSS selector
-	- `const elementList = await driver.findElements(By.css('bar'));` - get a list of all elements matching the given CSS selector
+	- `const elementList = await driver.findElements(By.css('.bar'));` - get a list of all elements matching the given CSS selector
 - Element Information
 	- `const text = element.getText();` - get the rendered text of the given element
 	- `const attribute = element.getAttribute('name');` - get the value of a given attribute of the given element
