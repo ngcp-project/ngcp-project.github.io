@@ -1,0 +1,105 @@
+---
+title: End-to-End Testing
+sidebar:
+  order: 2
+---
+
+The test suite utilizes [Selenium](https://selenium.dev/) as the automation architecture, [`tauri-driver`](https://tauri.app/develop/tests/webdriver/) to interface with the Tauri app, [Mocha](https://mochajs.org/) as the testing framework, and [Chai](https://www.chaijs.com/) for assertions.
+
+## Implementation Details
+
+Selenium does not come with a test suite for Tauri out of the gate; it is left to the developer to implement it. We took [Tauri's example test](https://tauri.app/develop/tests/webdriver/example/selenium/#testing) and split it out into a setup file and a driver helper file so that we could split our tests across multiple files. The setup file is used to start `tauri-driver` and the Tauri project itself, and the driver helper file gives each test file access to the driver to be able to run tests through it.
+
+### Challenges
+
+One of the challenges we faced was that the default Tauri build command called the default Vite build command, which involved type checking the frontend. However, the type checker ran into multiple errors that prevented the build from finishing correctly. We solved this by adding an additional command that purely built the frontend for testing purposes, and we also added a special Tauri config file for testing purposes. Additionally, this extra config file also allowed us to limit the test environment to a single window, preventing any issues that could arise from having multiple windows to interact with during testing.
+
+Another challenge was that some tests would attempt to find elements before they were fully loaded, such as before the page loaded or immediately after an action was performed. This was solved by making the webdriver pause briefly upon doing any actions that don't update immediately (such as adding a new mission) before continuing.
+
+### System Support
+
+Right now, `tauri-driver` only supports Windows and Linux systems; it does not support macOS. We are exploring options to get the webdriver working on macOS systems.
+
+## Writing Tests
+
+Here is an minimal test example you can start from:
+
+```
+import { createDriver, baseUrl } from '../helpers/driver.js';
+import { expect } from 'chai';
+import { By } from 'selenium-webdriver';
+
+describe("My Test Suite", () => {
+  let driver;
+
+  before(async () => {
+    // Set up the driver
+    driver = await createDriver();
+    await driver.manage().setTimeouts({ implicit: 2000 });
+    // Load page
+    await driver.get(baseUrl);
+  });
+
+  after(async () => {
+    // Stop the driver
+    await driver.quit();
+  });
+
+  it('should greet the user', async () => {
+    const text = await driver.findElement(By.css('body > h1')).getText();
+    expect(text).to.equal('Hello!');
+  });
+});
+```
+
+Depending on the screen you want to test, you will need to load one of these following URLs in `await driver.get()`:
+
+- Vehicle Camera Screen: `baseUrl`
+- Map Screen: `baseUrl + '/#/StaticScreen'`
+
+### Common Patterns
+
+A major part of writing tests consists of getting elements from the page, doing actions on the webpage (such as clicking), and checking that certain values are within expectations. As such, here is a list of common patterns for these actions and what they do:
+
+- Assertions
+	- `expect(foo).to.equal(bar);` - test that a given value `foo` matches another value `bar`
+	- `expect(foo).to.not.equal(bar);` - test that a given value `foo` does not match another value `bar`
+	- `expect(foo).to.be.true;` - test that a given value `foo` is true
+	- `expect(foo).to.be.false;` - test that a given value `foo` is false
+	- `expect(foo).to.be.lessThan(bar);` - test that a given value `foo` is less than another value `bar`
+	- `expect(foo).to.be.greaterThan(bar);` - test that a given value `foo` is greater than another value `bar`
+- Finding Elements
+	- `const element = await driver.findElement(By.css('.foo'));` - get the first element matching the given CSS selector
+	- `const elementList = await driver.findElements(By.css('bar'));` - get a list of all elements matching the given CSS selector
+- Element Information
+	- `const text = element.getText();` - get the rendered text of the given element
+	- `const attribute = element.getAttribute('name');` - get the value of a given attribute of the given element
+	- `const cssValue = element.getCssValue('color');` - get the specified CSS Value of the given element
+- Element Interactions
+	- `await element.click();` - click on the given element
+	- `await element.sendKeys('Hello World!');` - types the given string into an input field
+	- `await element.clear()` - reset the content of an input field
+- Miscellaneous
+	- `await driver.sleep(duration);` - pause test execution for the given time (in milliseconds)
+
+For more in-depth information on interacting with the webdriver, please visit [Selenium's WebDriver Documentation](https://www.selenium.dev/documentation/webdriver/).
+
+### Looping over Tests
+
+If you'd like to run a similar set of tests to test different parts that have the same structure, you can loop over test cases like such:
+
+```
+const testCases = [
+  { color: "red", hex: "#ff0000", name: "foo" },
+  { color: "green", hex: "#00ff00", name: "bar" },
+  { color: "blue", hex: "#0000ff", name: "quux" }
+];
+
+testCases.forEach(({ color, hex, name }) => {
+  it(`should ensure {name} is {color}`, async () => {
+    const element = await driver.findElements(By.css(`#{name}`));
+    const elementColor = await element.getCssValue('background-color');
+    expect(elementColor).to.equal(hex);
+  });
+});
+```
