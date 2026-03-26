@@ -98,7 +98,7 @@ A major part of writing tests consists of getting elements from the page, doing 
 - Element Interactions
 	- `await element.click();` - click on the given element
 	- `await element.sendKeys('Hello World!');` - types the given string into an input field
-	- `await element.clear()` - reset the content of an input field
+	- `await element.clear();` - reset the content of an input field
 - Miscellaneous
 	- `await driver.sleep(duration);` - pause test execution for the given time (in milliseconds)
 
