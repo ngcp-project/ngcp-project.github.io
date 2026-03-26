@@ -10,6 +10,16 @@ The test suite utilizes [Selenium](https://selenium.dev/) as the automation arch
 
 Selenium does not come with a test suite for Tauri out of the gate; it is left to the developer to implement it. We took [Tauri's example test](https://tauri.app/develop/tests/webdriver/example/selenium/#testing) and split it out into a setup file and a driver helper file so that we could split our tests across multiple files. The setup file is used to start `tauri-driver` and the Tauri project itself, and the driver helper file gives each test file access to the driver to be able to run tests through it.
 
+### File Structure
+
+- `e2e-tests/setup.ts` - sets up the testing framework (by building the project and running `tauri-driver`)
+- `e2e-tests/helpers/` - helper files that tests can reference for common functionality
+	- `driver.ts` - establishes connection between the test and the `tauri-driver` instance
+- `e2e-tests/specs/` - the tests to run; indicated by the extension `.spec.ts`
+- `.mocharc.json` - configuration file for the Mocha framework
+- `src-tauri/tauri.conf.test.json` - special tauri configuration used for the test suite
+- `.github/workflows/e2e-tests.yml` - workflow definition for running tests in GitHub Actions
+
 ### Challenges
 
 One of the challenges we faced was that the default Tauri build command called the default Vite build command, which involved type checking the frontend. However, the type checker ran into multiple errors that prevented the build from finishing correctly. We solved this by adding an additional command that purely built the frontend for testing purposes, and we also added a special Tauri config file for testing purposes. Additionally, this extra config file also allowed us to limit the test environment to a single window, preventing any issues that could arise from having multiple windows to interact with during testing.
@@ -23,6 +33,8 @@ Right now, `tauri-driver` only supports Windows and Linux systems; it does not s
 The test suite also runs on GitHub's runners every time a commit is pushed to the repository. It only runs on a Linux runner, as GitHub's Windows runners do not support running Linux containers due to a lack of nested virtualization support.
 
 ## Writing Tests
+
+To write a new test, add a new TypeScript file ending with the `.spec.ts` extension to `e2e-tests/specs`.
 
 Here is an minimal test example you can start from:
 
