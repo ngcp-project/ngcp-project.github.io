@@ -1,11 +1,12 @@
 ---
 title: Dummy Telemetry Test Script
 ---
+<small>**Author:** Tavina Chen | **Last Major Update:** Tavina on 2/13/2026 | **Contact:** taffykat (Discord) </small>
 
 > Note: This guide assumes that you have installed the GCS application, have it set up correctly, and know how to run it. If you haven't done so, please refer to the [Installation Guide](https://ngcp-project.github.io/gcs/installation/) and [Running GCS Guide](https://ngcp-project.github.io/gcs/running-gcs/).
 
 ## Purpose
-The purpose of this script is to confirm that the communication between the GCS Integration Library and the GCS Application is working. The script will randomly generate dummy telemetry data and send it into the vehicle telemetry queues. 
+This script will randomly generate dummy telemetry data and send it into the vehicle telemetry queues to confirm that the GCS Application is able to consume telemetry. 
 
 ## Pre-Script Checks
 1. Under the User Interface Repository (GCS application), go to the `.env` file. 
