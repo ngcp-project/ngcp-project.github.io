@@ -1,0 +1,80 @@
+---
+title: GCS File Reorg Design Doc
+description: DD for GCS Wide File Reorg
+---
+
+**Author(s):** Tavina C, Kayshawn W, Miguel S, Roberto C
+
+**PR Link:** The link to the PR for this design doc
+
+## Background
+The GCS Desktop Repo is unorganized. It is unclear what files every subteam is working on, old folders/files that should be deleted, etc. 
+
+Examples:
+- The top level has a lot of UI subteam files that are not relevant to GCS as a whole. 
+- Software Integration has a separate python program that needs to be run among other things. (The start up is difficult)
+- The set up is also complicated (must do things in order and it is not always sucessful) 
+- Several files that should have been ignored by .gitignore that still exist in the repo
+
+## Solution
+Each team will reorganize the [gcs-desktop-app](https://github.com/ngcp-project/gcs-desktop-app) repo into a monorepo of submodules/folders. This will be expanded upon in each subteam's respective Design Doc.
+
+- See [UI File Reorg DD](/gcs/design-docs/user-interface/)(TODO: update link once made)
+- See [DB File Reorg DD](/gcs/design-docs/database/)(TODO: update link once made)
+- See [SI File Reorg DD](/gcs/design-docs/software-integration/)(TODO: update link once made)
+- See [Infra File Reorg DD](/gcs/design-docs/infrastructure/)(TODO: update link once made)
+
+**This design doc will detail everything that does not belong to a single subteam.**
+
+The top level of the repo will be reserved for GCS wide files/folders.
+
+**There will be a new centralized:**
+- **Setup:** This should execute all the required set up (dependencies, docker, etc) in the correct order.
+- **Start:** This should execute all the required programs to easily start the GCS. If applicable, subteams should provide their own centralized start that can be executed by the gcs start process.
+
+## Design/Implementation
+
+import { FileTree } from '@astrojs/starlight/components';
+
+### New File Structure
+
+During the leads meeting on 9/6/2026, it has been determined that the following outdated/irrelevant files/dirs will be deleted from the repo:
+- [.vscode](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/.vscode) (This is user generated and is in the gitignore)
+- [public/](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/public)
+- [start.sh](https://github.com/ngcp-project/gcs-desktop-app/blob/main/start.sh)
+- TODO: Continue the list
+
+It was also determined that the following will be migrated to a more appropriate location:
+- TODO: List everything from the repo that is moving (no need to list destination)
+
+The end goal is for the gcs-desktop-app repo to look as such:
+
+<FileTree>
+- gcs-desktop-app/
+    - LICENSE
+    - README.md
+    - .gitignore
+    - start/
+        - docker-compose.yml
+    - gcs-user-interface/
+        - placeholder to be expanded upon by the corresponding subteam's DD
+    - gcs-databse/
+        - placeholder to be expanded upon by the corresponding subteam's DD
+    - gcs-software-integration/
+        - placeholder to be expanded upon by the corresponding subteam's DD
+    - gcs-infrastructure/
+        - placeholder to be expanded upon by the corresponding subteam's DD
+</FileTree>
+
+### Centralized Setup
+
+TODO: Fill out what we need for a centralized set up file. (Create new file `gcs-desktop-app/setup.py` ?) Each subteam should list out how their set up stuff should be activated. 
+
+### Centralized Start
+
+TODO: Robert work on expanding how we will use docker as our start. 
+
+What start config files are needed and where? (Create new file `gcs-desktop-app/start/start.py` ?). Maybe include some code snippets? Each subteam should list out how their start should be activated by this file.
+
+## Unit/End to End Testing
+TODO: Not sure if this section is relevant. Ig the main thing is to make sure it can still run after the file reorg. 
