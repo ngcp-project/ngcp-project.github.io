@@ -22,14 +22,14 @@ Each team will reorganize the [gcs-desktop-app](https://github.com/ngcp-project/
 - See [UI File Reorg DD](/gcs/design-docs/user-interface/)(TODO: update link once made)
 - See [DB File Reorg DD](/gcs/design-docs/database/)(TODO: update link once made)
 - See [SI File Reorg DD](/gcs/design-docs/software-integration/)(TODO: update link once made)
-- See [Infra File Reorg DD](/gcs/design-docs/infrastructure/)(TODO: update link once made)
+- See [Infra File Reorg DD](/gcs/design-docs/infrastructure/GCSFileReorg-Infra)(TODO: update link once made)
 
 **This design doc will detail everything that does not belong to a single subteam.**
 
 The top level of the repo will be reserved for GCS wide files/folders.
 
 **There will be a new centralized:**
-- **Setup:** This should execute all the required set up (dependencies, docker, etc) in the correct order.
+- **Setup:** This should execute all the required set up (dependencies, docker, etc) in the correct order. Should also check for the presence of and make a python virtual environment if there is not one.
 - **Start:** This should execute all the required programs to easily start the GCS. If applicable, subteams should provide their own centralized start that can be executed by the gcs start process.
 
 ## Design/Implementation
@@ -42,10 +42,34 @@ During the leads meeting on 9/6/2026, it has been determined that the following 
 - [.vscode](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/.vscode) (This is user generated and is in the gitignore)
 - [public/](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/public)
 - [start.sh](https://github.com/ngcp-project/gcs-desktop-app/blob/main/start.sh)
-- TODO: Continue the list
+- [index.html](https://github.com/ngcp-project/gcs-desktop-app/blob/main/index.html)
+- [start.sh](https://github.com/ngcp-project/gcs-desktop-app/blob/main/start.sh)
 
 It was also determined that the following will be migrated to a more appropriate location:
-- TODO: List everything from the repo that is moving (no need to list destination)
+#### Start Directory
+- gcsstart.file
+- docker-compose.yml
+
+#### User interface
+- e2e-tests/
+- src
+- Scripts
+- Eslintrc
+- tailwind.config.js
+- vite.config.js
+- .mocharc.json
+- .prettierrc
+- bun.lock
+- Components.json
+- flake.lock
+- Flake.nix
+- Package-lock.json
+- Package.json
+- tailwind.config.js
+- tsconfig.json
+- tsconfig.node.json
+#### infrastructure
+- Contents of the [gcs-infrastructure](https://github.com/ngcp-project/gcs-infrastructure) repo.
 
 The end goal is for the gcs-desktop-app repo to look as such:
 
@@ -63,12 +87,14 @@ The end goal is for the gcs-desktop-app repo to look as such:
     - gcs-software-integration/
         - placeholder to be expanded upon by the corresponding subteam's DD
     - gcs-infrastructure/
-        - placeholder to be expanded upon by the corresponding subteam's DD
+        - Contents of the [gcs-infrastructure](https://github.com/ngcp-project/gcs-infrastructure) repo.
 </FileTree>
 
 ### Centralized Setup
 
 TODO: Fill out what we need for a centralized set up file. (Create new file `gcs-desktop-app/setup.py` ?) Each subteam should list out how their set up stuff should be activated. 
+#### infrastructure
+All infrastructure dependencies are already within the repository and do not need any additional setup
 
 ### Centralized Start
 
