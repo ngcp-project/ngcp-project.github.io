@@ -66,6 +66,15 @@ It was also determined that the following will be migrated to a more appropriate
 #### infrastructure
 - Contents of the [gcs-infrastructure](https://github.com/ngcp-project/gcs-infrastructure) repo.
 
+### Git Submodules
+Each subteam's main repo will be added as a submodule of gcs-desktop app using `$ git submodule add <repository_url>` in the root dir. 
+
+Any other submodules used by a subteam's repo should be added as a submodule in the `lib/` folder using `$ git submodule add <repository_url> lib/<repo name>` in the root dir. 
+
+:::tip
+Using `lib/` is standard practice and no submodule should be initialized within another submodule because it increases complexity.
+:::
+
 The end goal is for the gcs-desktop-app repo to look as such:
 
 <FileTree>
@@ -83,6 +92,9 @@ The end goal is for the gcs-desktop-app repo to look as such:
         - placeholder to be expanded upon by the corresponding subteam's DD
     - gcs-infrastructure/
         - Contents of the [gcs-infrastructure](https://github.com/ngcp-project/gcs-infrastructure) repo.
+    - lib/
+        - [gcs-packet/](https://github.com/ngcp-project/gcs-packet/tree/main)
+        - [xbee-python/](https://github.com/ngcp-project/xbee-python/tree/main)
 </FileTree>
 
 ### Centralized Setup
