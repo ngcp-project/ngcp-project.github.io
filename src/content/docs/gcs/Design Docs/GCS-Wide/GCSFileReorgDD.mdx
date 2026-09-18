@@ -22,7 +22,7 @@ Each team will reorganize the [gcs-desktop-app](https://github.com/ngcp-project/
 - See [UI File Reorg DD](/gcs/design-docs/user-interface/)(TODO: update link once made)
 - See [DB File Reorg DD](/gcs/design-docs/database/)(TODO: update link once made)
 - See [SI File Reorg DD](/gcs/design-docs/software-integration/)(TODO: update link once made)
-- See [Infra File Reorg DD](/gcs/design-docs/infrastructure/GCSFileReorg-Infra)(TODO: update link once made)
+- See [Infra File Reorg DD](/gcs/design-docs/infrastructure/)(TODO: update link once made)
 
 **This design doc will detail everything that does not belong to a single subteam.**
 
@@ -41,15 +41,10 @@ import { FileTree } from '@astrojs/starlight/components';
 During the leads meeting on 9/6/2026, it has been determined that the following outdated/irrelevant files/dirs will be deleted from the repo:
 - [.vscode](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/.vscode) (This is user generated and is in the gitignore)
 - [public/](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/public)
-- [start.sh](https://github.com/ngcp-project/gcs-desktop-app/blob/main/start.sh)
-- [index.html](https://github.com/ngcp-project/gcs-desktop-app/blob/main/index.html)
+- [start.sh](https://github.com/ngcp-project/gcs-desktop-app/blob/main/start
 - [start.sh](https://github.com/ngcp-project/gcs-desktop-app/blob/main/start.sh)
 
 It was also determined that the following will be migrated to a more appropriate location:
-#### Start Directory
-- gcsstart.file
-- docker-compose.yml
-
 #### User interface
 - e2e-tests/
 - src
@@ -94,7 +89,13 @@ The end goal is for the gcs-desktop-app repo to look as such:
 
 TODO: Fill out what we need for a centralized set up file. (Create new file `gcs-desktop-app/setup.py` ?) Each subteam should list out how their set up stuff should be activated. 
 #### infrastructure
+(If done with direct pathing)
 All infrastructure dependencies are already within the repository and do not need any additional setup
+(If downloaded as a package)
+Run from gcs tld
+pip install -e .\infrastructure
+pip install -e .\infrastructure\lib\gcs-packet
+pip install -e .\infrastructure\lib\xbee-python
 
 ### Centralized Start
 
