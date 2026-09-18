@@ -1,6 +1,8 @@
 ---
 title: Software Integration Overview
 description: Home page for Software Integration team documentation.
+sidebar:
+  order: 3
 ---
 
 <small>**Author:** Tavina Chen | **Last Major Update:** Tavina on 8/27/2026 | **Contact:** taffykat (Discord) </small>
