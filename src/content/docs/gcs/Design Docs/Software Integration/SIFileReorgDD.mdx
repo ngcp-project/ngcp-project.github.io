@@ -1,0 +1,116 @@
+---
+title: SI File Reorg Design Doc
+description: DD for SI File Reog
+---
+
+**Author(s):** Tavina Chen
+
+**Related Teams:** All
+
+**PR Link:** The link to the PR for this design doc
+
+## Background
+This DD is a part of the effort to reorganize the gcs-desktop-app repo. See [GCS File Reorg Design Doc](/gcs/design-docs/gcs-wide/gcsfilereorgdd) for more information. The branches on gcs-desktop-app and the SI repo also needs some clean up (deprecated files, etc.)
+
+## Solution
+The software integration repo will be reorganized and restructured to account for files moving from the gcs-desktop-repo. The aim is to increase clarity and organization.
+
+Changes will be made accordingly to ensure it does not break the existing application.
+
+Unit tests should be set up to ensure everything is functioning. 
+
+## Design/Implementation
+
+The repo will be renamed from `GCS-Integration-Library-2025-26` to `gcs-software-integration` to follow the naming conventions of the other submodule repos. 
+
+All other subsequent files, folders, and class names will be converted to snake_case. 
+
+There will be 2 parts to consider for the restructuring.
+
+The existing code in [GCS-Integration-Library-2025-26](https://github.com/ngcp-project/GCS-Integration-Library-2025-26/tree/077bf1dbb88307fc44a9181a9ccbbbbcc541b19a) which contains the python program that interacts with the hardware (xbees). And [gcs-desktop-app/src-tauri/src](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src) which contains the rust code that interacts with the state manager.
+
+### `gcs-software-integration` changes
+
+**The following files will be removed:**
+    - `Testing/GCSTest.py` (copy of existing test file in infra)
+    - `Testing/VehicleTest.py` (copy of existing test file in infra)
+    - `gcs_application.py` *(split this into unit tests)
+    - `xbee_tag_gcs.py` (deprecated)
+    - `xbee_tag_vehicle.py` (deprecated)
+
+**The following files/folders will be renamed:**
+    - `SoftwareIntegration` to `src`
+    - `xbee_gcs.py` to `main.py`
+    - `Testing` to `test`
+    - `CommandListener.py` to `command_listener.py` (snake_case)
+    - `Acknowledgement.py` to `acknowledgement.py` (snake_case)
+    - `TelemetryPublisher.py` to `telemetry_publisher.py` (snake_case)
+    - `VehicleObj.py` to `vehicle_obj.py` (snake_case)
+    - `CommandPublisher.py` to `command_publisher.py` (snake_case)
+
+**The following files/folders will be created:**
+    - `src/hardware_integration/commands/`
+    - `src/hardware_integration/telemetry/`
+    - `src/hardware_integration/types/` (such as vehicle or wether station)
+    - `test/hardware_integration/hardware_sim/` (simulates the vehicle side without Xbees)
+    - `test/gcs_desktop_integration/gcs_desktop_sim/` (simulates the gcs without the gcs app)
+
+Subsequent files following the file structure in `src/` will be made for unit tests. See more in [Unit/End to End Testing](/gcs/design-docs/software-integration/sifilereorgdd/#unitend-to-end-testing)
+
+**The following files will be moved:**
+    - `main.py` to `src/hardware_integration/`
+    - `command_listener.py` to `src/hardware_integration/commands/`
+    - `acknowledgement.py` to `src/hardware_integration/commands/`
+    - `telemetry_publisher.py` to `src/hardware_integration/telemetry/`
+    - `vehicle_obj.py` to `src/hardware_integration/types/`
+    - `command_emergency_stop.py` to `test/gcs_desktop_integration/gcs_desktop_sim/`
+    - `command_interface.py` to `test/gcs_desktop_integration/gcs_desktop_sim/`
+    - `command_publisher.py` to `test/gcs_desktop_integration/gcs_desktop_sim/`
+
+### `gcs-desktop-app` changes
+
+**The following code/files will be moved:**
+    - []
+
+### Final File Structure
+
+The end goal is for the `gcs-software-integration` repo to look as such:
+
+import { FileTree } from '@astrojs/starlight/components';
+
+<FileTree>
+    - gcs-software-integration/
+        - .gitignore
+        - .gitsubmodules
+        - README.md *(update out of date README.md)
+        - src/
+            - hardware_integration/
+                - main.py
+                - commands/
+                    - command_listener.py
+                    - acknowledgement.py *(revist usage later)
+                - telemetry/
+                    - telemetry_publisher.py
+                - types/
+                    - vehicle_obj.py
+            - gcs_desktop_integration/
+        - test/
+            - hardware_integration/
+                - hardware_sim/
+            - gcs_desktop_integration/
+                - gcs_desktop_sim/
+                    - command_emergency_stop.py
+                    - command_interface.py
+                    - command_publisher.py *(revist file restructuring)
+        - lib/
+            - [gcs-infrastructure/](https://github.com/ngcp-project/gcs-infrastructure)
+            - [gcs-packet/](https://github.com/ngcp-project/gcs-packet/tree/main)
+            - [xbee-python/](https://github.com/ngcp-project/xbee-python/tree/main)
+</FileTree>
+
+## Unit/End to End Testing
+List out what cases and edge cases you will be testing. If you are refactoring, no need to list the cases, just make sure it passes existing test cases. 
+
+Unit tests would be like testing normal and edge cases for newly introduced methods or a small part of the flow. The test file should be named after the file you are testing (yourFileTest.x) and located in a testing folder (create one if it does not exist). If applicable, you may use a testing framework. 
+
+End to end testing would be test files that test the entire process from point A to point B. This may be cross-team, endpoints/interfaces that your subteam has with other teams, etc. Include this if applicable.
