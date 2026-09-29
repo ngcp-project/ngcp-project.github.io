@@ -28,23 +28,10 @@ A command has been acknowleged if it fufills the following requirments:
 
 ## Heartbeat
 :::caution[Tech Debt:]
-The current implementation of the heartbeat is scattered and disjointed. Code for both methods described below exist, so it is unclear what the intended flow is. This should be discussed. 
+The current implementation of the heartbeat should remain in the Software Integration repository, implementations on the GCS-Desktop should not be considered and eliminated.Current implementation on the Software Integration should be discussed. 
 :::
 
-### Method 1: GCS App Impl (Currently Partically Working)
-
-![SI Heartbeat Flow](/diagrams/SI/SIHeartbeat1.png)
-
-1. On the GCS Desktop, the telemetry is consumed and processed to update the connection status
-2. The VehicleHeartbeat keeps track of when a telemetry packet was last recieved from a vehicle. 
-    - If the time exceeds the timeout, it is updated to display a "Disconnected" status
-    - If a vehicle was disconnected and there is telemetry being recieved, it is updated to display a "Connected" status
-:::caution[Tech Debt:]
-- VehicleHeartbeat Consecutive failures are counted but the value is unused?
-- This implementation is not ideal as it does not seem to use the Heartbeat command.
-:::
-
-### Method 2: SI Repo Impl (Currently broken/not used?)
+### Method : SI Repo Impl (Currently broken/not used?)
 ![SI Heartbeat Command Flow](/diagrams/SI/SIHeartbeat2.png)
 
 1. Each vehicle has their own Heartbeat Manger
@@ -63,6 +50,7 @@ This is subjected to change.
 1. The Heartbeat Manager will send out 10 consecutive **Disconnected** Heartbeat statuses to the vehicle before shutting down. These are considered the reconnection attempts
 2. It will publish the last known telemetry packet data of that vehicle with the **Disconnected** status to the RabbitMQ telemetry queue
 :::caution[Tech Debt:]
+Once the vehicle does not answer reconnection attempts, the vehicle will be considered as disconnected (lost vehicle).
 The current implementation does not include a way to restart the Heartbeat Manager once a vehicle reconnects. 
 :::
 
@@ -83,13 +71,13 @@ Otherwise, it is sending telemetry into the void without feedback.
 ![SI General Command Flow](/diagrams/SI/SIGeneralCommands.png)
 
 1. The user presses a UI button (Emergency Stop, Start Mission) which updates the GCS App State Manager
-2. The State Manager publishes a command into a unique, temporary, RabbitMQ queue
+2. The State Manager publishes a command into a fixed RabbitMQ queue(Vehicle Command Queue).
     - This queue will manage the timeout of the command
 3. The Command Manager consumes the command from the queue
 4. The command gets encoded and sent to the vehicle through the GCS Xbee
 5. Telemetry Manager checks the Telemetry for an acknowledgement of the command
-6. Once the command is acknowledged, a RabbitMQ ack is sent back to the same unique queue
-    - If the queue expires without an ack, a toast notification will appear on the UI alerting the operator that the command failed to send 
+6. Once the command is acknowledged, a RabbitMQ ack is sent back to the fixed queue(Command Acknowledgement Queue).
+    - If the queue does not receive an acknowledgement during a time frame(expires), a toast notification will appear on the UI alerting the operator that the command failed to send 
 
 :::tip[Command Args:]
 See [gcs-packet/Packet/Command](https://github.com/ngcp-project/gcs-packet/tree/main/Packet/Command) for what args each command is expecting. 
