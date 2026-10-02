@@ -17,7 +17,7 @@ description: Details the flow of telemetry from vehicle to GCS.
 - This code should be used as reference to understand the flow of telemetry data not as the official implementation.
 :::
 
-### <span style="color:#ADD8E6"> SI Repository : Publisher Telemetry </span>
+### <span style="color:#DA70D6"> SI Repository : Publisher Telemetry </span>
 
 #### Set up server
 ```python
@@ -52,7 +52,7 @@ def publish(self, data : Telemetry):
         body = message
                 )
 ```
-### <span style="color:#ADD8E6"> GCS Desktop Repository : Consumer Telemetry </span>
+### <span style="color:#DA70D6"> GCS Desktop Repository : Consumer Telemetry </span>
 #### Set up server
 ```rust
 pub async fn new() -> LapinResult<Self> {

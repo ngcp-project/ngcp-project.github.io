@@ -26,13 +26,13 @@ A command has been acknowleged if it fufills the following requirments:
 7. On the GCS Desktop, the telemetry is consumed and processed to display the statuses "Located" and "Secured"
 
 
-## Heartbeat
+## Heartbeat (Partially working)
 :::caution[Tech Debt:]
-- The current implementation of the heartbeat should remain in the Software Integration repository, implementations on the GCS-Desktop should not be considered and eliminated.
-- Current implementation on the Software Integration should be discussed. 
+- The current implementation of the heartbeat should remain in the `Software Integration` repository, implementations on the GCS-Desktop should not be considered and eliminated.
+- Current implementation on the `Software Integration` should be discussed. 
 :::
 
-### SI Repo Impl (Partially working)
+
 ![SI Heartbeat Command Flow](/diagrams/SI/SIHeartbeat.png)
 
 1. Each vehicle has their own Heartbeat Manger
@@ -79,14 +79,16 @@ Otherwise, it is sending telemetry into the void without feedback.
 5. Telemetry Manager checks the Telemetry for an acknowledgement of the command
 6. Once the command is acknowledged, a RabbitMQ ack is sent back to the fixed queue(Command Acknowledgement Queue).
     - If the queue does not receive an acknowledgement during a time frame(expires), a toast notification will appear on the UI alerting the operator that the command failed to send 
-
+:::tip[Command Args:]
+See [gcs-packet/Packet/Command](https://github.com/ngcp-project/gcs-packet/tree/main/Packet/Command) for what args each command is expecting. 
+:::
 ## <span style="color:#f60"> RabbitMQ </span> 
 :::caution[Caution:]
 - The current implementation of the command consumer and publisher, will change with the new restructuring of the repositories.
 - This code should be used as reference to understand the flow of command data not as the official implementation.
 :::
 
-### <span style="color:#ADD8E6"> GCS Desktop : Publisher Command </span>
+### <span style="color:#DA70D6"> GCS Desktop : Publisher Command </span>
 #### Connection Creation
 ```rust
 impl CommandsApiImpl {
@@ -137,7 +139,7 @@ impl CommandsApiImpl {
             .map_err(|e| format!("Failed to publish: {}", e))?;
 }
 ```
-### <span style="color:#ADD8E6"> Software Integration : Consumer Command </span>
+### <span style="color:#DA70D6"> Software Integration : Consumer Command </span>
 #### Command Listener Initializer
 ```python
 class CommandListener:
@@ -232,6 +234,3 @@ class CommandListener:
         )
 ```
 - Publishing back the message to the command ack queue for both True or False messages.
-
-See [gcs-packet/Packet/Command](https://github.com/ngcp-project/gcs-packet/tree/main/Packet/Command) for what args each command is expecting. 
-:::

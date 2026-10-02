@@ -17,6 +17,7 @@ For more information:
 ## Usage for GCS
 - RabbitMQ serves, as the central message broker in GCS(Ground Control Station) architectures, enabling efficient communication between multiple vehicles using different queues within one channel and one connection to the same server.
 ### Architecture Components:
+#### Telemetry Example
 - Publishers: Vehicle systems that published the data from the vehicle 
 - Subscribers: Backend systems that receive and process messages
 - Queues: Separate message channels for different vehicle types or functions
@@ -31,4 +32,4 @@ For more information:
 - Data flows continuously from vehicles to display  
 
 ### Data Flow Summary:
-#### Vehicle → RabbitMQ Queue → Backend Consumer → Frontend Display + Database Storage
+#### Vehicle Publisher → RabbitMQ Queue → Exchange Routing → RabbitMQ Queue → Frontend Consumer
