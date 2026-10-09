@@ -37,6 +37,8 @@ The existing code in [GCS-Integration-Library-2025-26](https://github.com/ngcp-p
     - `gcs_application.py` *(split this into unit tests)
     - `xbee_tag_gcs.py` (deprecated)
     - `xbee_tag_vehicle.py` (deprecated)
+    - `.env` (should be private, not pushed to github; add to .gitignore)
+    - `weather_telem.py` (until we figure out rfp reqs)
 
 **The following files/folders will be renamed:**
     - `SoftwareIntegration` to `src`
@@ -47,6 +49,7 @@ The existing code in [GCS-Integration-Library-2025-26](https://github.com/ngcp-p
     - `TelemetryPublisher.py` to `telemetry_publisher.py` (snake_case)
     - `VehicleObj.py` to `vehicle_obj.py` (snake_case)
     - `CommandPublisher.py` to `command_publisher.py` (snake_case)
+    - `requirements.txt` to `submodule_setup.txt` (update infra file pathing)
 
 **The following files/folders will be created:**
     - `src/hardware_integration/commands/`
@@ -54,6 +57,7 @@ The existing code in [GCS-Integration-Library-2025-26](https://github.com/ngcp-p
     - `src/hardware_integration/types/` (such as vehicle or wether station)
     - `test/hardware_integration/hardware_sim/` (simulates the vehicle side without Xbees)
     - `test/gcs_desktop_integration/gcs_desktop_sim/` (simulates the gcs without the gcs app)
+    - `standalone_setup.txt` (install an Infra mock python package & pika)
 
 Subsequent files following the file structure in `src/` will be made for unit tests. See more in [Unit/End to End Testing](/gcs/design-docs/software-integration/sifilereorgdd/#unitend-to-end-testing)
 
@@ -66,11 +70,21 @@ Subsequent files following the file structure in `src/` will be made for unit te
     - `command_emergency_stop.py` to `test/gcs_desktop_integration/gcs_desktop_sim/`
     - `command_interface.py` to `test/gcs_desktop_integration/gcs_desktop_sim/`
     - `command_publisher.py` to `test/gcs_desktop_integration/gcs_desktop_sim/`
+    - `submodule_setup.txt` to `setup/`
 
 ### `gcs-desktop-app` changes
 
+**The following code/files will be removed:**
+    - `gcs-desktop-app/src-tauri/src/telemetry/test_rabbitmq.rs`
+    - `gcs-desktop-app/src-tauri/src/telemetry/publisher.rs`
+
 **The following code/files will be moved:**
-    - []
+    - `gcs-desktop-app/src-tauri/src/commands` to `src/gcs_desktop_integration/`
+    -  `gcs-desktop-app/src-tauri/src/telemetry/rabbitmq/heartbeat.rs` to `src/gcs_desktop_integration/commands`
+    - `gcs-desktop-app/src-tauri/src/telemetry/rabbitmq/listen.rs` to `src/gcs_desktop_integration/telemetry/`
+    - `gcs-desktop-app/src-tauri/src/telemetry/rabbitmq/mod.rs` to `src/gcs_desktop_integration/telemetry/`
+    - `gcs-desktop-app/src-tauri/src/telemetry/rabbitmq/process.rs` to `src/gcs_desktop_integration/telemetry/`
+    - `src-tauri/src/telemetry/types.rs` (lines 92-122 `TelemetryData`, `RequestCoordinate`, `Coordinate`) to `src/gcs_desktop_integration/types/`
 
 ### Final File Structure
 
@@ -94,6 +108,19 @@ import { FileTree } from '@astrojs/starlight/components';
                 - types/
                     - vehicle_obj.py
             - gcs_desktop_integration/
+                - commands/
+                    - commands.rs
+                    - heartbeat.rs *(restructure)
+                    - mod.rs (from `commands/`)
+                - telemetry/
+                    - listen.rs
+                    - mod.rs (from `telemetry/`)
+                    - process.rs
+                - types/
+                    - TelemetryData.rs
+                    - RequestCoordinate.rs
+                    - Coordinate.rs
+
         - test/
             - hardware_integration/
                 - hardware_sim/
@@ -106,7 +133,17 @@ import { FileTree } from '@astrojs/starlight/components';
             - [gcs-infrastructure/](https://github.com/ngcp-project/gcs-infrastructure)
             - [gcs-packet/](https://github.com/ngcp-project/gcs-packet/tree/main)
             - [xbee-python/](https://github.com/ngcp-project/xbee-python/tree/main)
+        - setup/
+            - python/
+                - standalone_setup.txt
+                - submodule_setup.txt
+            - rust/
 </FileTree>
+
+### Interfacing with other teams
+Once everything is moved, we need to ensure it doesn't break the whole application (Expecially the rust side).
+
+This aims to outline how our team will interface with other teams.
 
 ## Unit/End to End Testing
 List out what cases and edge cases you will be testing. If you are refactoring, no need to list the cases, just make sure it passes existing test cases. 
