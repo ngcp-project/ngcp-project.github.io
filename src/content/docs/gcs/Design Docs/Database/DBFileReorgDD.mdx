@@ -1,0 +1,367 @@
+---
+title: Database File Reorg Design Doc
+description: DD for moving the Database code into the gcs-backend submodule and adding a State Manager
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+**Author(s):** Roberto M. Castro
+
+**Related Teams:** Software Integration & Frontend
+
+**PR Link:** The link to the PR for this design doc
+
+## Summary
+
+- Database code moves out of `src-tauri` into a new `gcs-backend` submodule that the Database team owns.
+- A new State Manager becomes the only owner of mission and vehicle state. Today five separate pieces of code hold that state, and they drift apart.
+- Versioned migrations (numbered SQL files that update the schema one step at a time) replace the table creation that runs on every launch. Recorded missions are kept so they can be replayed after a flight, as the 2026-27 RFP requires.
+- The RabbitMQ code goes to Software Integration (SI). This doc proposes how SI's code connects to the State Manager, which SI still needs to agree to.
+- Steps 1 to 5 of the [migration order](#migration-order) are normal PRs inside today's repo. The files move only in the last step.
+
+## Background
+
+This design doc (DD) is part of the effort to reorganize gcs-desktop-app into a repo of subteam submodules. The [GCS File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/GCSFileReorgDD/src/content/docs/gcs/Design%20Docs/GCS-Wide/GCSFileReorgDD.mdx) has the overall plan. This doc fills in its `gcs-backend/` placeholder.
+
+Database code currently lives in [`src-tauri/src`](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src), mixed in with the RabbitMQ messaging code and the UI-facing code. The [State Manager page](/gcs/database/state-manager/) describes `MissionApiImpl` as the State Manager, but `MissionApiImpl` holds only part of the mission state. In total, five places hold state, and each has its own lock:
+
+- `MissionApiImpl` holds missions, vehicles, stages and zones, and has its own Postgres connection pool.
+- `LAST_STATE` is a global holding the active mission id.
+- `KEEP_OUT_ZONES` is a global cache of keep-out zone points.
+- `RabbitMQAPIImpl` holds the latest telemetry and heartbeat times, and has a second Postgres pool.
+- `CommandsApiImpl` holds the last command sent.
+
+These copies drift apart. For example, starting a mission does not update `LAST_STATE`, so the geofence and survivor checks keep using whichever mission was active when the app launched. Changes also have no fixed order. Some write the database first and some change memory first. Most also use `.expect()`, so a failed query crashes the app instead of returning an error to the UI.
+
+The database setup has its own problems:
+
+- The connection string is hard-coded in five files, and each run opens at least three Postgres pools.
+- Tables are created with `CREATE TABLE IF NOT EXISTS` on every launch. That statement skips tables that already exist, so schema changes never reach existing databases.
+- The Postgres container has no pinned version, no named volume and no healthcheck.
+- Telemetry rows have no timestamp or mission id, so a flight can't be replayed from them.
+
+### RFP Requirement(s)
+
+These come from the 2026-27 Draft Request for Proposal (RFP, RevA) and its requirements sheet. This design directly supports the following:
+
+- [GCS_02] The GCS shall detect if the connection to one or more vehicles is lost during mission operations.
+- [GCS_03] The GCS shall attempt to reconnect to any disconnected vehicles 10 times or for 60 seconds.
+- [GCS_11] The GCS shall allow users to define mission state, search areas, keep in zones, and keep out zones.
+- [GCS_13] The GCS shall transmit all user defined mission states and mission-related locations, search areas, keep in zones, and keep out zones to each vehicle as is appropriate.
+- [GCS_14] The GCS shall be able to command an emergency stop/loiter to each individual vehicle.
+- [GCS_15] The GCS shall be able to command a system wide emergency stop/loiter to all vehicles simultaneously.
+- [GCS_23] The GCS shall record vehicle telemetry and status, and mission states during operation.
+- [GCS_24] The GCS shall provide a post-mission playback of data consistent with GCS_23.
+- [GCS_07] The GCS shall receive video feed from the ERU during manual control.
+- [GCS_08] The GCS shall receive video feed from the MRA during flight.
+- [SYS_15] Upon location, the survivor's position shall be displayed by the GCS at all times until safely back at the hospital.
+- [SYS_16] Upon location, the fire's location shall be displayed by the GCS at all times.
+- [SYS_18] All system components shall be able to be repaired and running within 15 minutes of component failure.
+- [SYS_23] All vehicle telemetry and command communications shall be utilized independent of Wi-Fi.
+
+The 2026-27 RFP also changes the mission. There are three vehicles, the Multirole Aircraft (MRA), Emergency Response Unit (ERU) and Med-Evac Aircraft (MEA), with no FRA. There is also one survivor, and a new fire detection and suppression task. The survivor's location must be sent to the other search vehicle through the GCS.
+
+## Solution
+
+The Database team will own a `gcs-backend` submodule. It is a Rust library crate with three parts:
+
+1. The State Manager, the single owner of mission and vehicle state. The rest of the GCS reads from it and makes changes through it.
+2. The data layer: the Postgres connection, versioned schema migrations, and one query file per table.
+3. The Postgres service definition for the centralized start in `start/`.
+
+The RabbitMQ code goes to Software Integration, as described in the [SI File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/SIFileReorgDD/src/content/docs/gcs/Design%20Docs/Software%20Integration/SIFileReorgDD.mdx). This doc proposes how SI's code connects to the State Manager. SI needs to agree before that part is final.
+
+The UI keeps calling the same taurpc procedures (`mission.*`, `telemetry.*`, `commands.*`), so the Vue stores do not change during the move. taurpc is the library that gives the Vue frontend typed calls into the Rust backend.
+
+## Design/Implementation
+
+### Final file structure
+
+<FileTree>
+- gcs-backend/
+  - Cargo.toml (library crate `gcs_backend`)
+  - README.md
+  - .env.example
+  - .gitignore
+  - docker/
+    - compose.yaml (Postgres service)
+  - migrations/
+    - 0001_baseline.sql (today's schema)
+    - 0002_mission_lifecycle_and_reports.sql
+    - 0003_zones_jsonb.sql
+    - 0004_telemetry_history.sql
+    - 0005_commands_and_events_log.sql
+    - 0006_video_segments.sql
+  - src/
+    - lib.rs
+    - config.rs (reads `DATABASE_URL` and flags from the environment)
+    - error.rs
+    - state/ (the State Manager: the only code that holds the lock or changes live data)
+      - mod.rs (`StateManager` and its public operations)
+      - store.rs (the live data and its lock, read methods)
+      - missions.rs (mission, stage and zone changes)
+      - vehicles.rs (`apply_telemetry`, link status, keep-out checks)
+      - commands.rs (pending commands, `apply_command_ack`, timeouts, the `CommandSender` interface)
+      - events.rs (state events and the channel the Tauri app listens on)
+      - load.rs (rebuild memory from Postgres at startup)
+    - domain/
+      - mission.rs (missions, stages, status rules)
+      - zone.rs
+      - vehicle.rs
+      - telemetry.rs
+      - geo.rs (distance and point-in-polygon checks)
+    - db/
+      - mod.rs (connect with retry, run migrations)
+      - missions.rs
+      - vehicles.rs
+      - stages.rs
+      - zones.rs
+      - telemetry.rs
+      - commands.rs
+      - video.rs (video segment rows)
+    - dev/
+      - seed.rs (demo missions, behind a cargo feature)
+  - tests/
+    - state.rs
+    - migrations.rs
+</FileTree>
+
+| New location | Comes from | Change |
+| --- | --- | --- |
+| `state/` | [`missions/api/*`](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/missions/api) helpers, `LAST_STATE`, `KEEP_OUT_ZONES` | Merged into one owner. The startup load in `missions/api/state.rs` becomes `state/load.rs`. |
+| `domain/` | [`missions/types.rs`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/missions/types.rs), [`telemetry/types.rs`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/telemetry/types.rs), [`telemetry/geos.rs`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/telemetry/geos.rs) | Moved. The geofence check is rewritten to test whether a point is inside a zone. Today it only checks distance to the zone's corners. |
+| `db/` | [`missions/sql.rs`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/missions/sql.rs), [`telemetry/sql.rs`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/telemetry/sql.rs) | Split into one file per table. Queries return errors instead of panicking. |
+| `migrations/` | Table creation in [`init_db.rs`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/init_db.rs) | Versioned with `sqlx::migrate!` |
+| `dev/seed.rs` | Dummy data in `init_db.rs` | Off by default |
+
+Each folder has one rule:
+
+- `state/` is the only code that holds the lock or changes live data.
+- `db/` is the only code that runs SQL.
+- `domain/` does neither, so its types and rules can be tested on their own.
+
+The RabbitMQ code (`telemetry/rabbitmq/`, `telemetry/publisher.rs`, `commands/`) goes to Software Integration. `main.rs`, `tauri.conf.json` and the OpenCV sidecar stay with the Tauri app. The taurpc procedures the UI calls should sit next to `main.rs` and call the State Manager. Which team owns them is still an open question. This layer builds the old return types (`MissionsStruct`, `VehicleTelemetryData`) from State Manager data, so the UI gets the same data shapes as today.
+
+The Tauri app depends on this crate with a path dependency, for example `gcs_backend = { path = "../gcs-backend" }`. The exact path depends on where `src-tauri` ends up in the new layout. A path dependency only builds inside the monorepo, which matches how the GCS-Wide DD uses submodules.
+
+The TypeScript bindings the UI imports (`src/lib/bindings.ts`) are generated by taurpc when the app runs in debug mode, and they are not committed. After the procedures move, check that they still land in the UI folder, and add a build step that generates them before the UI type check runs.
+
+### State Manager
+
+The State Manager is the only code that changes mission or vehicle state. Everything else reads from it or asks it to make a change.
+
+![Proposed gcs-backend crate: db/ runs all SQL, state/ holds the live data in store.rs behind one lock, and domain/ holds types and rules. Four flows: A, an operator change from the UI that is checked, saved, applied to memory, published as an event and sent as a vehicle command; B, telemetry from SI into apply_telemetry; C, command results into apply_command_ack; D, load.rs rebuilding memory from Postgres at startup.](/diagrams/gcs/state-manager-flow.svg)
+
+[Open the State Manager flow SVG](/diagrams/gcs/state-manager-flow.svg) to view it at full size.
+
+It holds:
+
+- all missions with their vehicles, stages and zones
+- the active mission id
+- each vehicle's latest telemetry and link status
+- the survivor and fire reports
+- commands waiting for a result
+
+All of this live data sits behind one lock in `state/store.rs`. The active mission id and keep-out zones are read from mission state when needed, so they can't go stale the way the `LAST_STATE` and `KEEP_OUT_ZONES` globals do now.
+
+Every change follows the same order:
+
+1. Check that the change is allowed. For example, a mission can only be deleted while it is Inactive.
+2. Save it to Postgres in one transaction. If the change sends a vehicle command, record the command as pending in the same transaction.
+3. Update the in-memory copy, then release the lock.
+4. Publish an event.
+5. Send any vehicle commands. If a send fails, mark that command as failed.
+
+Recording a command as pending before it is sent means a fast reply from the vehicle always has something to match. Today the order varies: `rename_mission` writes the database first, while `start_mission` updates memory first. The current code also holds the mission lock while it opens a new RabbitMQ connection for each command.
+
+The State Manager doesn't import Tauri or RabbitMQ, so its tests need only a database. It connects to the rest of the GCS in four places:
+
+- To the UI: changes go out as events on a channel (`state/events.rs`). The Tauri app forwards those events to the existing `on_updated` events, so the Vue stores stay the same. If the UI falls behind, the app resends a full snapshot.
+- Telemetry from SI: SI's consumers call `apply_telemetry` (`state/vehicles.rs`).
+- Command results from SI: SI's consumers call `apply_command_ack` (`state/commands.rs`).
+- Commands to SI: vehicle commands leave through a small `CommandSender` interface, also in `state/commands.rs`, that SI implements with RabbitMQ.
+
+At startup, `state/load.rs` rebuilds the in-memory copy from Postgres. If the app restarts mid-mission, it picks up the active mission where it left off, which supports the 15-minute recovery requirement (SYS_18).
+
+The public operations cover:
+
+- reading a snapshot, one mission, the active mission, or vehicle data
+- creating, renaming, deleting, starting, completing and failing missions
+- adding, renaming and deleting stages, setting a stage's search area, and advancing to the next stage
+- adding, updating and deleting zones
+- setting auto mode
+- sending an emergency stop or loiter to one vehicle or to all of them
+
+Complete, fail and loiter are new. Today a mission only becomes Complete when another mission starts. Every operation returns an error to the caller instead of panicking (crashing the app).
+
+A new mission status report gives the UI one object per mission. It holds:
+
+- mission status and elapsed time, so operators can track the 45-minute limit
+- each vehicle's stage progress, auto mode and link status
+- the result of each command that was sent
+- the survivor's location and status, if a vehicle has reported it
+- the fire location, if a vehicle has reported it
+
+The survivor status runs from not found, to found, to secured, to delivered at the hospital. The survivor's location stays on the report until delivery (SYS_15). Either the MRA or the ERU can report the survivor, and either the MEA or the ERU can report the fire, because the ERU's secondary role covers both.
+
+Link status and alerts (near a keep-out zone, link lost) become their own fields. Today they are strings that overwrite each other in `vehicle_status`. Link status also tracks reconnect attempts, so the UI can show when the GCS has tried 10 times or for 60 seconds (GCS_03).
+
+### Recording and replay
+
+The GCS must record telemetry, status and mission states, and play them back after the mission (GCS_23 to GCS_25). The backend records:
+
+- every telemetry message, with the time received and the mission id
+- every mission and stage change
+- every link change
+- every command sent and its result
+
+Each record has a timestamp, so the UI can rebuild the mission timeline. The replay screen is part of the UI design. This DD covers only the data and a read API that returns a mission's records in time order.
+
+A mission at 1 Hz from three vehicles for 45 minutes is roughly 8,000 telemetry rows, so storage size is not a concern. Recorded missions are never deleted automatically. Resetting the dev database must not touch them. To clear space, export missions one at a time.
+
+### Camera streams
+
+Today only one camera works, and only when it is plugged into the GCS laptop. [`opencv.py`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/opencv.py) is a small Flask server that streams the laptop's first video device as MJPEG (a series of JPEG frames) at `127.0.0.1:5000/video_feed`. Tauri starts it as a sidecar (a helper program launched with the app), and `Cameras.vue` shows it as the ERU feed; the MRA feed is commented out. The sidecar isn't listed in `tauri.conf.json` (`externalBin` is empty), so it isn't bundled, and if it fails to start, nothing reports it. A separate two-camera script, `FPV/fpv_combined.py`, lives in gcs-infrastructure. No video is recorded, and none of it reaches the backend or the database.
+
+The requirements ask the GCS to receive video from the ERU during manual control (GCS_07) and from the MRA during flight (GCS_08). It must display every feed while the vehicle is operating (GCS_10). The RFP lists video as something the GCS may receive from each vehicle (§4.4). The recording requirement (GCS_23) covers telemetry and mission states and does not mention video. Communication must also work without Wi-Fi (SYS_23).
+
+Our plan keeps video off RabbitMQ and the XBee radio, which are far too slow for it. Each vehicle sends video over its own FPV (first-person view) video link to a receiver and USB capture device on the GCS laptop. On our side:
+
+- One video service replaces `opencv.py` and `fpv_combined.py`. It serves one stream per vehicle, and a config file maps each capture device to a vehicle.
+- The State Manager tracks each feed's status (live, no signal, not configured) next to the vehicle's link status, so the UI can show it without checking the stream itself.
+- When a mission is active, the video service saves each feed to video files in a recordings folder on a Docker volume, split into short segments. Postgres stores only a row per segment: mission id, vehicle, file path, start and end time. Video itself never goes in the database.
+- Because each segment has a start time, the replay API can return the video segments alongside telemetry, so the replay screen can line video up with the timeline.
+
+Recording video is not required, so it is the last part to build. Who owns the video service, UI or Infrastructure, is an open question.
+
+### Schema migrations
+
+Migrations replace the table creation in `init_db.rs`. On startup, `db::connect` retries until Postgres is ready, then applies any migrations that haven't run yet.
+
+| Migration | Adds | Why |
+| --- | --- | --- |
+| `0001_baseline` | Today's four tables, written with `IF NOT EXISTS` | Applies cleanly to both new and existing dev databases |
+| `0002_mission_lifecycle_and_reports` | Mission start and end times; survivor reports (status, location, vehicle, time); fire reports (location, vehicle, time); nullable `current_stage_id` foreign key instead of `-1`; one row per vehicle per mission | Survivor and fire reports survive a restart; no placeholder values |
+| `0003_zones_jsonb` | A `zones` table and search areas stored as JSONB (Postgres's JSON column type) | Replaces hand-formatted `"(lat,long)"` strings and their parsers |
+| `0004_telemetry_history` | Row id, `received_at` timestamp, `mission_id`, index on vehicle and time | Telemetry can be ordered, filtered by mission and replayed |
+| `0005_commands_and_events_log` | A `commands` table (request id, vehicle, kind, sent and acknowledged times, result) and a `mission_events` table (mission, stage and link changes with timestamps) | Command results and the mission timeline can be replayed after a flight |
+| `0006_video_segments` | A `video_segments` table (mission id, vehicle, file path, start and end time) | Recorded video can be found and lined up with the replay timeline |
+
+Status columns also get `CHECK` constraints, so invalid values can't be saved.
+
+Some migrations also change existing data:
+
+- `0002` changes today's `-1` stage ids to `NULL` before it adds the foreign key. Without this, the migration fails on any existing database.
+- `0003` converts the existing `"(lat,long)"` strings to JSON. Dev data could be dropped instead, but the migration should say which it does.
+- `0003` also replaces the zone upsert (insert-or-update query) in `sql.rs`. Today an update for an unknown mission id quietly creates a new, empty mission.
+
+Tests switch to `#[sqlx::test]`, which builds a throwaway database for each test from the migrations. That removes the separate table definitions in the `sql.rs` test module. Those definitions use `auto_mode` where the real schema has `is_auto`, so the tests could never catch that bug. It also removes the need for `ngcpdb_test`, which the current tests expect but nothing creates.
+
+`sqlx::migrate!` copies the migration files into the app when it compiles, so `build.rs` must tell Cargo to rebuild when the `migrations/` folder changes. If the team adopts sqlx's compile-time checked queries, commit the `.sqlx/` folder and build with `SQLX_OFFLINE=true`, so builds don't need a running database. Those checks would have caught the `auto_mode` bug.
+
+### Postgres container
+
+`gcs-backend/docker/compose.yaml` defines only the Postgres service. This doc proposes that the GCS-Wide centralized start, `start/docker-compose.yml`, pull it in with Compose's `include:` option. That needs Docker Compose 2.20 or newer. The GCS-Wide and SI owners decide where RabbitMQ and the map tile server go. Compared with today's service, the changes are:
+
+- Pin the image to the Postgres major version the team runs now. The unpinned `postgres` tag moves to each new major release, and a new major version can't read the old data directory.
+- Add a named volume, so data survives `docker compose down`.
+- Add a `pg_isready` healthcheck and `restart: unless-stopped`. The healthcheck lets `start/` wait until the database is ready, and the restart policy brings the database back by itself after a crash.
+- Keep today's `shm_size: 128mb`.
+- Read the user, password, database name and host port from one `.env` file at the repo root, with today's `ngcp` / `ngcpdb` / `5433` as defaults. The `start/` compose file names that file explicitly, so included files don't look for their own.
+
+`DATABASE_URL` comes from the same `.env`, replacing the five hard-coded connection strings. `CLEAR_DATABASE_EVERYTIME` becomes `GCS_RESET_DATABASE`, and `DUMMY_DATA_ENABLED` becomes `GCS_SEED_DEMO_DATA`. A committed `.env.example` lists every setting, and the real `.env` is removed from git. The app must then start without a `.env` file, so `main.rs` has to stop calling `.expect()` on loading it.
+
+Everything must run without Wi-Fi (SYS_23). The Postgres image is pinned so it can be pulled ahead of time, and nothing in the backend calls out to the internet at run time.
+
+### Things that are not connected
+
+These are places where the code expects a counterpart that is missing or doesn't match. This design fixes items 1 to 9. Items 10 to 18 are requests to Software Integration.
+
+**Fixed by this design**
+
+1. Starting a mission does not update the active mission id. `start_mission` sets `current_mission` but not `LAST_STATE`, which the telemetry geofence and survivor checks read ([state.rs:76](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/missions/api/state.rs#L76), [process.rs:55](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/telemetry/rabbitmq/process.rs#L55)).
+2. The keep-out cache does not follow zone edits. Adding a zone skips the cache, and updating one appends a copy instead of replacing the old one. Deleting a zone can panic when the cache entry is missing ([zones.rs:77](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/missions/api/zones.rs#L77), [zones.rs:141](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/missions/api/zones.rs#L141)).
+3. Survivor status is not saved. A survivor event changes only the UI's copy. Nothing writes `vehicles.patient_status`, and `survivor_coordinate` is marked "in-memory only" ([types.rs:21](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/missions/types.rs#L21)).
+4. Auto mode writes a column that does not exist. The query updates `auto_mode`, but the schema column is `is_auto`. So auto-mode changes for MEA and ERU panic on the `.expect` call ([sql.rs:294](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/missions/sql.rs#L294), [init_db.rs:601](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/init_db.rs#L601)).
+5. There is no way to complete or fail a mission. The status enum has both values, but no operation sets them directly.
+6. Telemetry history is written but never read. Rows have no timestamp or mission id, and no code queries the table. Replay depends on this table, so it must be fixed.
+7. `stages.target_coordinate` is selected at load time, then discarded, because the stage type has no field for it. Migration `0002` should either add the field or drop the column.
+8. "No mission" has two values. The type comment says `-1`, but loading sets `0`. The State Manager uses an optional id instead.
+9. Startup does not wait for its services. The app panics if Postgres or RabbitMQ is not ready. The reset flag drops three of the four tables and leaves telemetry in place.
+
+**Requests to Software Integration**
+
+10. The emergency stop never reaches a vehicle. Rust sends command id 1, which Python reads as a heartbeat. Encoding that heartbeat fails, the error is only logged, and no packet is sent. GCS_14 and GCS_15 require this command, so it is the most urgent fix.
+11. Command ids differ between Rust and Python for zones too. Rust sends 2, 3 and 4 for zones, but Python expects 3, 4 and 5, so each zone arrives as the wrong kind. The request is that the State Manager sends named command kinds through `CommandSender`, and SI maps them to wire ids in one place.
+12. Command results are never read. The Python listener publishes to `command_ack`, but no Rust code consumes it. The request is a consumer that calls `apply_command_ack`.
+13. Command results can't be matched to the command that caused them. The result message has no request id. A command for all vehicles goes out as three separate sends, one after another, and comes back as three separate results. Each send can retry for up to 25 seconds. The request has two parts: echo the request id in each result, and send to all vehicles at once so a system-wide stop (GCS_15) isn't delayed.
+14. The survivor flag is ignored. Python marks a found survivor with `message_flag`, but Rust treats any survivor field as a report. Both sides should read the same flag, and the message definitions need a fire-found flag as well. The message formats should be written down once, as shared schemas that both sides test against (GCS_20).
+15. Signal strength is always 0. No code reads RSSI (the radio's signal strength) from the XBee, and the Python publisher hard-codes `signal_strength: 0`, so the weak-signal check in Rust never fires. The request is to read RSSI from the radio or drop the field, and to agree on its units.
+16. The survivor location relay has two owners. Python sends the survivor's location to every vehicle on its own, and the GCS never learns whether it arrived. The RFP says this relay goes through the GCS, so the request is for the State Manager to send it as a command through `CommandSender`. Its result is then tracked like any other command.
+17. Auto mode never reaches a vehicle. `set_auto_mode` only writes the database, and gcs-packet has no auto-mode packet, so the UI toggle does nothing on the vehicle. The request is for the packet owners to define one. It then becomes another command kind.
+18. Every command opens and closes its own RabbitMQ connection, and publisher confirms are never turned on, so the code waits for a delivery confirmation that checks nothing. The request is one long-lived connection with confirms enabled.
+
+### Migration order
+
+Each step leaves the app runnable. Steps 1 to 5 happen inside today's `src-tauri`, so they can go through normal PRs before any files move.
+
+1. Fix the `auto_mode` column name, including in the test table definitions, and set the active mission id in `start_mission`.
+2. Add `config.rs`, and create one shared Postgres connection pool that is passed to everything that needs the database. Commit `.env.example`, take `.env` out of git, and let the app start without it.
+3. Update the Postgres service as described in [Postgres container](#postgres-container): pin the image and add the volume, healthcheck and restart policy. Add connect-with-retry at startup.
+4. Add `migrations/0001_baseline.sql` and `sqlx::migrate!`. Remove the table creation from `init_db.rs`, and put the dummy data and the test publisher behind feature flags.
+5. Write the `state/` module using the current data shapes. Move the mission, stage, zone and telemetry operations onto it one group at a time. Delete `LAST_STATE` and `KEEP_OUT_ZONES` once nothing uses them.
+6. Apply migrations `0002` to `0005`. Add the complete, fail and loiter operations, the mission status report and the replay read API.
+7. Add feed status for each camera. Once the video service exists, add `0006_video_segments` and include segments in replay.
+8. Move the files into the `gcs-backend` submodule, and add its compose file to `start/docker-compose.yml`.
+
+Steps 1 to 4 don't depend on SI. SI can work on items 10 to 18 in parallel at any time. They should start early because the emergency stop (item 10) is broken today.
+
+### Alternatives considered
+
+#### [PREFERRED] One State Manager with one lock
+
+All live state sits behind one lock, and every change follows the same five steps.
+
+**Pros:**
+- One place to look for any state change, and one order that every change follows.
+- Easy to test without Tauri or RabbitMQ.
+
+**Cons:**
+- Every change waits on the same lock. With three vehicles at 1 Hz (one update per second), this is not a bottleneck.
+
+#### [ALTERNATIVE 1] Keep today's structure and fix the bugs in place
+
+Fix the individual bugs (items 1 to 9) without moving state into one owner.
+
+**Pros:**
+- Smaller change, no file moves.
+
+**Cons:**
+- The separate copies of state would still drift out of sync, and the next feature would add another copy.
+- Replay and the new survivor and fire reports have no single place to live.
+
+#### [ALTERNATIVE 2] Split the backend code by subteam instead of by layer
+
+The File Reorganization Proposal moves the database files and the messaging files into separate subteam folders. This doc follows it for the RabbitMQ code, which goes to SI. Inside `gcs-backend`, the code is split by job (`state/`, `db/`, `domain/`), because the State Manager uses all three and they change together.
+
+## Open questions
+
+- Who owns the taurpc procedures the UI calls (`mission.*`, `telemetry.*`)? It could be User Interface or Database.
+- Does SI agree to the `CommandSender` interface, the `command_ack` consumer, the request id and the single connection (items 11 to 13 and 18)?
+- What environment variable names should SI's Python code use for the RabbitMQ address and credentials? They should come from the same `.env` file.
+- Where does weather data come from (SYS_17), given that the system must run without Wi-Fi? It may need its own input in the State Manager.
+- Who owns the video service, UI or Infrastructure? Which FPV receivers and capture devices will the MRA and ERU teams use?
+
+## Unit/End to End Testing
+
+The existing tests in `sql.rs` and `zones.rs` must keep passing after the move. New tests cover:
+
+- Every migration applies to both an empty database and one created by today's `init_db.rs`, including rows with `-1` stage ids.
+- Starting a mission completes the previous active one and sets the active mission id. Complete and fail reject invalid transitions.
+- An out-of-range zone index returns an error instead of panicking.
+- `apply_telemetry` flags a vehicle inside or near a keep-out zone of the active mission. It records a survivor or fire only when the message flag says so, and it saves the report to the database.
+- A State Manager rebuilt from the database matches the state it had before the restart, including the active mission.
+- A replay read returns a mission's telemetry, events and commands in time order.
+- A command whose send fails is marked as failed, and a result for an unknown request id is ignored.
+- A video segment row points at a file that exists, and its times fall inside the mission's start and end.
+- End to end: with services running from `start/`, a result published to `command_ack` appears in the mission status report. This test depends on item 12.
