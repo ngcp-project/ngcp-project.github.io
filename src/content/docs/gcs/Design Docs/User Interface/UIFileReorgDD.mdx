@@ -1,0 +1,412 @@
+---
+title: UI File Reorg Design Doc
+description: DD for moving the User Interface files out of the top level of gcs-desktop-app and into a single gcs-user-interface folder
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+**Author(s):** Miguel S
+
+**Related Teams:** Database, Software Integration, Infrastructure (GCS-Wide)
+
+**PR Link:** The link to the PR for this design doc
+
+## Summary
+
+- Every User Interface (UI) file at the top level of gcs-desktop-app moves into one `gcs-user-interface/` folder: the Vue app, its build and lint configs, its lockfiles and its end to end tests.
+- `src-tauri/` does **not** move. It stays at the repo root as the shared Tauri app, because it will depend on the Database team's `gcs-backend` crate and on Software Integration's (SI) Rust code. See [Where src-tauri goes](#where-src-tauri-goes).
+- Five things outside the UI folder point at UI paths and must change in the same PR: `tauri.conf.json`, the taurpc `export_to` paths, the e2e test paths, the CI workflow and `.gitignore`.
+- The UI shares one root `.env` with the backend, as the [DB File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/BackendFileReorgDD/src/content/docs/gcs/Design%20Docs/Database/DBFileReorgDD.mdx) proposes, so Vite is pointed at the repo root for its env file.
+- The move is one mechanical PR and should land **before** the Database and SI file moves, so their moved files already carry the new UI paths.
+
+## Background
+
+This design doc (DD) is part of the effort to reorganize gcs-desktop-app into a repo of subteam submodules. The [GCS File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/GCSFileReorgDD/src/content/docs/gcs/Design%20Docs/GCS-Wide/GCSFileReorgDD.mdx) has the overall plan and reserves the top level of the repo for GCS-wide files. This doc fills in its `gcs-user-interface/` placeholder.
+
+Today the UI *is* the top level of the repo. gcs-desktop-app started as the UI project, so the Vue app and all of its configs sit next to `src-tauri/` (Database and SI Rust code), `docker-compose.yml` (Postgres, RabbitMQ and the map tile server) and `flake.nix` (the whole team's dev environment). At [`deb007b`](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb), the top level holds:
+
+| UI files | Not UI files |
+| --- | --- |
+| `src/`, `public/`, `scripts/`, `e2e-tests/`, `node_modules/` (not tracked), `index.html`, `package.json`, `bun.lock`, `package-lock.json`, `components.json`, `tailwind.config.js`, `vite.config.ts`, `tsconfig.json`, `tsconfig.node.json`, `.eslintrc.cjs`, `.prettierrc`, `.mocharc.json` | `src-tauri/`, `docker-compose.yml`, `.env`, `flake.nix`, `flake.lock`, `start.sh`, `.github/`, `.vscode/`, `.gitignore`, `README.md`, `LICENSE` |
+
+This causes a few problems:
+
+- It is hard to tell which files belong to which subteam. A new Database or SI member has to wade through Vite, Tailwind, ESLint and Prettier configs to find their code.
+- The Database and SI DDs can't settle their own paths until the UI moves. The DB DD notes that "the exact path [of the `gcs_backend` dependency] depends on where `src-tauri` ends up in the new layout", and that the taurpc bindings must still "land in the UI folder" after the procedures move.
+- The repo has two lockfiles. `bun.lock` is what CI and the README use. `package-lock.json` is older and nothing reads it.
+- `tauri.conf.json`, the taurpc procedures and the e2e tests all use paths like `../src` and `../dist`, which only work because the UI sits at the root. Any move has to update them together.
+
+### RFP Requirement(s)
+
+This is an organizational change, so no 2026-27 RFP requirement depends on it directly. It supports:
+
+- [SYS_18] All system components shall be able to be repaired and running within 15 minutes of component failure. A UI with its own folder, its own README and a single lockfile is quicker to reinstall and rebuild on a replacement laptop.
+- [SYS_23] All vehicle telemetry and command communications shall be utilized independent of Wi-Fi. Keeping one lockfile (`bun.lock`) makes `bun install` repeatable, so dependencies can be installed ahead of time and the app built offline.
+
+## Solution
+
+All UI files move, with their git history, into a new `gcs-user-interface/` folder at the root of gcs-desktop-app. The folder is self-contained: running `bun install`, `bun run dev`, `bun run lint`, `bun run build` and `bun run tauri dev` from inside it works the same as from the root today.
+
+`src-tauri/` stays at the root as the shared Tauri app shell. Its config now points into the UI folder for the frontend, and the UI's `tauri` script points back at `../src-tauri`.
+
+The end goal matches the GCS File Reorg DD: the top level holds only GCS-wide files, and `gcs-user-interface/` can later become a submodule pointing at its own repo without further path changes.
+
+## Design/Implementation
+
+### Final file structure
+
+<FileTree>
+- gcs-desktop-app/
+  - .env (shared by the UI and gcs-backend, not committed, see the DB DD)
+  - .env.example
+  - .github/workflows/e2e-tests.yml (stays here, updated paths)
+  - .gitignore (GCS-wide entries only)
+  - LICENSE
+  - README.md (GCS-wide)
+  - start/ (from the GCS File Reorg DD)
+    - docker-compose.yml
+  - src-tauri/ (stays at the root, see [Where src-tauri goes](#where-src-tauri-goes))
+    - tauri.conf.json (updated)
+    - tauri.conf.test.json
+    - …
+  - gcs-backend/ (from the DB File Reorg DD)
+  - gcs-software-integration/
+  - gcs-infrastructure/
+  - **gcs-user-interface/**
+    - .gitignore (new: UI entries)
+    - README.md (new: the UI parts of today's README)
+    - .eslintrc.cjs
+    - .mocharc.json
+    - .prettierrc
+    - bun.lock
+    - components.json
+    - index.html
+    - package.json (updated scripts)
+    - tailwind.config.js
+    - tsconfig.json
+    - tsconfig.node.json
+    - vite.config.ts (updated `envDir`)
+    - e2e-tests/ (updated paths)
+      - helpers/driver.ts
+      - setup.ts
+      - specs/
+    - node_modules/ (not tracked, recreated by `bun install`)
+    - public/
+      - Atlases/SLO/
+      - tauri.svg
+      - vite.svg
+    - scripts/
+      - target-triple.js (updated path)
+    - src/
+      - App.vue
+      - main.ts
+      - main.css
+      - assets/
+      - components/
+      - lib/ (includes the generated `bindings.ts`)
+      - router/
+      - types/
+      - views/
+</FileTree>
+
+### What moves and what changes
+
+| File / folder | New location | Change needed |
+| --- | --- | --- |
+| [`src/`](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src) | `gcs-user-interface/src/` | None. All imports use the `@/` alias or relative paths. |
+| [`public/`](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/public) | `gcs-user-interface/public/` | None. See the note on the leads' decision below. |
+| [`scripts/target-triple.js`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/scripts/target-triple.js) | `gcs-user-interface/scripts/` | Renames `src-tauri/binaries/opencv` relative to the working directory. Change it to `../src-tauri/binaries/…`. |
+| [`e2e-tests/`](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/e2e-tests) | `gcs-user-interface/e2e-tests/` | Not in the original list, but `.mocharc.json` points at it and the GCS File Reorg DD assigns it to UI. Update the two paths into `src-tauri` (see [e2e tests](#e2e-tests)). |
+| `node_modules/` | `gcs-user-interface/node_modules/` | Not tracked by git, so there is nothing to move. Delete the root copy and run `bun install` inside the new folder. |
+| [`.eslintrc.cjs`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/.eslintrc.cjs) | `gcs-user-interface/` | None. `root: true` already stops ESLint from reading parent configs. The `lint` script's `--ignore-path .gitignore` now reads the new UI `.gitignore`. |
+| [`.mocharc.json`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/.mocharc.json) | `gcs-user-interface/` | None, as long as `e2e-tests/` moves with it. |
+| [`.prettierrc`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/.prettierrc) | `gcs-user-interface/` | None. |
+| [`bun.lock`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/bun.lock) | `gcs-user-interface/` | None. |
+| [`package-lock.json`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/package-lock.json) | Deleted | Bun is the package manager (README, CI, `tauri.conf.json`). The npm lockfile is stale and only causes confusion. See [Alternatives](#alternative-2-keep-package-lockjson). |
+| [`components.json`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/components.json) | `gcs-user-interface/` | None. Its paths are relative to the folder it sits in. |
+| [`index.html`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/index.html) | `gcs-user-interface/` | None. `/src/main.ts` and `/vite.svg` are resolved from the Vite root. |
+| [`package.json`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/package.json) | `gcs-user-interface/` | Update the `tauri` script, remove the `osm:*` scripts once Docker moves to `start/` (see [package.json scripts](#packagejson-scripts)). |
+| [`tailwind.config.js`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/tailwind.config.js) | `gcs-user-interface/` | None. The `content` globs are relative to where Vite runs. The unused `./pages`, `./components` and `./app` globs can be dropped. |
+| [`tsconfig.json`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/tsconfig.json), [`tsconfig.node.json`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/tsconfig.node.json) | `gcs-user-interface/` | None. `baseUrl: "."` moves with the file. The two `include` entries for files that no longer exist (`src/test-websocket-server.cjs`, `src/webSocket.cts`) can be dropped. |
+| [`vite.config.ts`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/vite.config.ts) | `gcs-user-interface/` | Add `envDir: ".."` so Vite reads the shared root `.env` (see [Environment variables](#environment-variables)). The `@` alias uses `__dirname`, so it keeps working. |
+
+**Files that do not move:**
+
+- `src-tauri/` stays at the root. See the next section.
+- `.github/` stays at the root, because GitHub only reads workflows from there. The e2e workflow gets updated paths.
+- `docker-compose.yml`, `.env`, `flake.nix`, `flake.lock`, `README.md`, `LICENSE` and `.gitignore` are GCS-wide. The DB DD and the GCS File Reorg DD decide where they go. The UI-specific parts of `README.md` and `.gitignore` are copied into new files inside `gcs-user-interface/`.
+- `start.sh` and `.vscode/` are deleted, as the leads decided on 9/6/2026.
+
+:::note[public/]
+Originally we had listed `public/` for deletion. This doc moves it instead, for two reasons. `index.html` loads `/vite.svg` from it as the window icon, and `public/Atlases/SLO/` holds the only offline map tiles in the repo (zoom 14 to 16 around San Luis Obispo). No code reads the tiles today, since the map uses the tile server at `localhost:8080`. With SYS_23 (no Wi-Fi), they may still be worth keeping as a fallback. Deleting `public/` (or just `tauri.svg` and the atlas) can be a small follow-up PR once the leads confirm....
+:::
+
+:::note[flake.nix and flake.lock]
+The GCS File Reorg DD lists the Nix flake under UI. This doc leaves it at the root, because it sets up Rust, Python (Flask, OpenCV), Docker Compose and the WebKit libraries for the whole GCS, not just the UI. Its owner is an [open question](#open-questions).
+:::
+
+### Where src-tauri goes
+
+`src-tauri/` was not in the list of UI files, and the DB DD leaves its location open. There are two options.
+
+#### [PREFERRED] src-tauri stays at the repo root
+
+`src-tauri/` becomes the shared Tauri app shell that ties the subteam code together. This matches what the DB DD describes: "`main.rs`, `tauri.conf.json` and the OpenCV sidecar stay with the Tauri app", and the taurpc procedures "sit next to `main.rs` and call the State Manager".
+
+With this layout the DB DD's example dependency works as written:
+
+```toml
+# src-tauri/Cargo.toml
+[dependencies]
+gcs_backend = { path = "../gcs-backend" }
+```
+
+**Pros:**
+- `gcs-user-interface/` contains only frontend code, so it can become its own submodule repo and build on its own.
+- The Rust path dependencies on `gcs-backend` and SI's crate stay one level up (`../gcs-backend`) instead of reaching out of a submodule (`../../gcs-backend`).
+- Rust developers on Database and SI don't need to open the UI folder to work on the app shell.
+
+**Cons:**
+- `tauri.conf.json`, the taurpc `export_to` paths and the UI's `tauri` script have to point across folders (`../gcs-user-interface/…` and `../src-tauri`).
+- This is not the default layout Tauri's docs and `create-tauri-app` use, so new members should be pointed to this doc or the README.
+
+#### [ALTERNATIVE 1] Move src-tauri into gcs-user-interface
+
+Use the standard Tauri layout, `gcs-user-interface/src-tauri/`.
+
+**Pros:**
+- `tauri.conf.json` (`../dist`), the `export_to` paths (`../src/lib/bindings.ts`) and the e2e test paths keep working unchanged.
+
+**Cons:**
+- The UI folder would hold the Database and SI Rust code, the State Manager integration and the RabbitMQ consumers. This is what the reorg is trying to undo.
+- Once `gcs-user-interface` is a submodule, the UI repo would depend on `../../gcs-backend`, which only exists in the parent repo. The UI repo could no longer be built on its own.
+
+### tauri.conf.json
+
+[src-tauri/tauri.conf.json](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/tauri.conf.json)
+```diff
+// src-tauri/tauri.conf.json
+  "build": {
+    "beforeBuildCommand": "bun run build",
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:4000",
+-   "frontendDist": "../dist"
++   "frontendDist": "../gcs-user-interface/dist"
+  },
+```
+
+`frontendDist` is relative to `src-tauri/`. The `before*Command`s run in the frontend folder, which the UI's `tauri` script sets (next section), so they stay the same. `tauri.conf.test.json` only overrides `beforeBuildCommand` and needs no change.
+
+### package.json scripts
+
+Today `bun run tauri` is run from the repo root, where the Tauri CLI finds `src-tauri/` on its own. From inside `gcs-user-interface/` it can't, so the script tells it where both halves are using the Tauri CLI's `TAURI_APP_PATH` (the Rust project) and `TAURI_FRONTEND_PATH` (the frontend) environment variables:
+
+```diff
+// gcs-user-interface/package.json
+  "scripts": {
+    "build": "vue-tsc --noEmit && vite build",
+    "build:test": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+-   "osm:setup": "docker compose run osm-setup",
+-   "osm:run": "docker compose up osm-server",
+-   "tauri": "tauri",
++   "tauri": "TAURI_APP_PATH=../src-tauri TAURI_FRONTEND_PATH=. tauri",
+    "format": "prettier --write src/",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
+    "target:triple": "node scripts/target-triple.js",
+    "test": "mocha"
+  },
+```
+
+Bun runs `package.json` scripts with its own shell, so `VAR=value command` works on Windows too.
+
+:::caution
+Confirm that the pinned `@tauri-apps/cli` (`2.0.0`) reads `TAURI_APP_PATH` and `TAURI_FRONTEND_PATH` before merging. If it does not, either bump the CLI to a 2.x release that does, or fall back to `"tauri": "cd .. && tauri"`. That fallback runs the CLI from the root, so `tauri.conf.json` would also need `"beforeDevCommand": "cd gcs-user-interface && bun run dev"` (and the same for both build commands).
+:::
+
+The `osm:setup` and `osm:run` scripts start the map tile server from the root `docker-compose.yml`. Docker Compose searches parent folders for a compose file, so they keep working right after the move. They are removed when the GCS File Reorg DD moves Compose into `start/`, since starting services is the centralized start's job, not the UI's.
+
+### Environment variables
+
+The UI reads two flags from `.env`, `VITE_MAP_DEBUG` ([Map.vue](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src/components/Map.vue#L67)) and `VITE_ERROR_TOAST_DEBUG` ([App.vue](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src/App.vue#L111)). Vite only looks for `.env` in its own root, which would now be `gcs-user-interface/`.
+
+The DB DD proposes one `.env` at the repo root for everything, with a committed `.env.example`. To match it, Vite is pointed one folder up:
+
+```diff
+// gcs-user-interface/vite.config.ts
+export default defineConfig(async () => ({
+  plugins: [vue()],
++ // read the shared .env at the repo root (see the DB File Reorg DD)
++ envDir: "..",
+  clearScreen: false,
+```
+
+Only variables starting with `VITE_` or `TAURI_` reach the browser (`envPrefix`), so the database and RabbitMQ settings in the same file stay out of the frontend bundle. Both `VITE_` flags must be added to the DB DD's `.env.example`.
+
+### taurpc bindings
+
+The Vue stores import their typed calls from `src/lib/bindings.ts`. taurpc writes that file when the app starts in debug mode, and it isn't committed. Two procedures set where it goes, relative to `src-tauri/`:
+
+- [`commands/commands.rs:31`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/commands/commands.rs#L31)
+- [`telemetry/rabbitmq/mod.rs:155`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/telemetry/rabbitmq/mod.rs#L155)
+
+```diff
+// src-tauri/src/commands/commands.rs (and the same in telemetry/rabbitmq/mod.rs)
+- #[procedures(export_to = "../src/lib/bindings.ts", path = "commands")]
++ #[procedures(export_to = "../gcs-user-interface/src/lib/bindings.ts", path = "commands")]
+```
+
+Both files belong to SI after the reorg, and the DB DD moves the procedures the UI calls next to `main.rs`. This is why the UI move should land first: SI and Database then move files that already have the right path. The DB DD's check, "that [the bindings] still land in the UI folder", is satisfied as long as `src-tauri/` stays at the root, because `../gcs-user-interface/src/lib/bindings.ts` is the same from `src-tauri/` either way.
+
+The root `.gitignore` entry `src/lib/bindings.ts` moves into the new `gcs-user-interface/.gitignore` unchanged, since it is relative to that file.
+
+The DB DD also asks for a build step that generates the bindings before the UI type check (`vue-tsc`) runs. Today CI does this with a hack (`bun run tauri dev || true`). That step stays as-is for this move. A proper export command is a follow-up for whichever team owns the taurpc procedures, which is still an open question in the DB DD.
+
+### e2e tests
+
+[`e2e-tests/setup.ts`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/e2e-tests/setup.ts) builds the app with a test config, and [`helpers/driver.ts`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/e2e-tests/helpers/driver.ts) points Selenium at the built binary. Both assume `src-tauri/` is a sibling of `e2e-tests/`.
+
+```diff
+// gcs-user-interface/e2e-tests/setup.ts
+- spawnSync('bun', ['run', 'tauri', 'build', '--config', 'src-tauri/tauri.conf.test.json', '--debug', '--no-bundle'], {
++ spawnSync('bun', ['run', 'tauri', 'build', '--config', '../src-tauri/tauri.conf.test.json', '--debug', '--no-bundle'], {
+    cwd: path.resolve(__dirname, '..'),
+```
+
+```diff
+// gcs-user-interface/e2e-tests/helpers/driver.ts
+  const application = path.resolve(
+    __dirname,
+    '..',
+    '..',
++   '..',
+    'src-tauri',
+    'target',
+    'debug',
+    'Interface'
+  );
+```
+
+### CI workflow
+
+[`.github/workflows/e2e-tests.yml`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/.github/workflows/e2e-tests.yml) stays at the root. The Bun steps run inside the UI folder, while the Docker steps stay at the root (and later move to `start/`):
+
+```diff
+// .github/workflows/e2e-tests.yml
+  jobs:
+    test:
+      runs-on: ubuntu-latest
++     defaults:
++       run:
++         working-directory: gcs-user-interface
+      steps:
+        ...
+        - name: Pull Docker Containers
++         working-directory: .
+          run: docker compose pull
+        - name: Start DB and RabbitMQ
++         working-directory: .
+          run: docker compose up -d db rabbitmq
+        - name: Set up Map Server
+-         run: bun run osm:setup
++         working-directory: .
++         run: docker compose run osm-setup
+        - name: Start Map Server
+-         run: bun run osm:run -d
++         working-directory: .
++         run: docker compose up -d osm-server
+```
+
+The Rust cache (`workspaces: src-tauri`) stays the same. The map server steps call Compose directly instead of the `osm:*` scripts, because those scripts are removed from the UI once Compose moves to `start/`.
+
+### Scripts and the OpenCV sidecar
+
+`scripts/target-triple.js` exists only to rename the PyInstaller build of `src-tauri/opencv.py` for Tauri's sidecar. It moves with the UI and gets its path fixed:
+
+```diff
+// gcs-user-interface/scripts/target-triple.js
+  fs.renameSync(
+-   `src-tauri/binaries/opencv${extension}`,
+-   `src-tauri/binaries/opencv-${targetTriple}${extension}`
++   `../src-tauri/binaries/opencv${extension}`,
++   `../src-tauri/binaries/opencv-${targetTriple}${extension}`
+  );
+```
+
+The DB DD plans to replace `opencv.py` with one video service that serves a stream per vehicle. When that lands, this script and the `target:triple` script are deleted, and [`Cameras.vue`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src/components/Cameras.vue#L20) switches from the hard-coded `127.0.0.1:5000/video_feed` to the per-vehicle streams and feed status from the State Manager.
+
+### How this interacts with the DB File Reorg DD
+
+The [DB File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/BackendFileReorgDD/src/content/docs/gcs/Design%20Docs/Database/DBFileReorgDD.mdx) changes the backend that the UI talks to, so the two moves have to agree on the following:
+
+| DB DD decision | Effect on this DD |
+| --- | --- |
+| The UI keeps calling the same taurpc procedures (`mission.*`, `telemetry.*`, `commands.*`) with the same data shapes. | The Vue stores (`MissionStore.ts`, `TelemetryStore.ts`, `MapStore.ts`) don't change during either move. The two PRs only touch paths, so they can be reviewed separately. |
+| `gcs_backend = { path = "../gcs-backend" }`, with "the exact path depend[ing] on where `src-tauri` ends up". | This DD keeps `src-tauri/` at the root, so the example path is final. |
+| Bindings must still land in the UI folder, and a build step should generate them before the type check. | `export_to` is updated to `../gcs-user-interface/src/lib/bindings.ts`. The build step is a follow-up (see [taurpc bindings](#taurpc-bindings)). |
+| One `.env` at the repo root, a committed `.env.example`, and `.env` taken out of git. | Vite reads it with `envDir: ".."`. The `VITE_` flags go in `.env.example`. |
+| Postgres moves to `gcs-backend/docker/compose.yaml`, included from `start/docker-compose.yml`. | The UI's `osm:*` scripts are removed when Compose moves to `start/`. The UI no longer starts any services itself. |
+| The State Manager adds a mission status report, link status, survivor and fire reports, and a replay read API. | No change in this move. New UI work for those (status panel, replay screen) goes in `gcs-user-interface/src/` once the backend parts exist. |
+| The OpenCV sidecar is replaced by a video service. | `scripts/target-triple.js` is temporary (see above). |
+
+#### Migration order
+
+The DB DD's steps 1 to 5 are PRs inside today's `src-tauri/`, and its step 8 moves the files into `gcs-backend/`. SI's DD also moves `commands/` and `telemetry/rabbitmq/`, which hold the `export_to` paths. To keep conflicts small:
+
+1. **This DD, step 1 (one PR):** `git mv` all UI files into `gcs-user-interface/`, delete `package-lock.json`, add the UI `.gitignore` and `README.md`, update `tauri.conf.json`, the two `export_to` paths, the e2e paths, `vite.config.ts`, `target-triple.js` and the CI workflow. Delete the root `node_modules/` and `dist/`, then run `bun install` in the new folder. This can land at any time relative to the DB DD's steps 1 to 5, since it only touches two lines inside `src-tauri/src`.
+2. **DB DD step 2:** when `.env.example` is added, include the two `VITE_` flags.
+3. **DB DD step 8 and the SI move:** the moved procedures already carry the new `export_to` path.
+4. **GCS File Reorg DD (centralized start):** when Compose moves to `start/`, remove the `osm:*` scripts and update the CI Docker steps to use `start/`.
+5. **Optional, GCS File Reorg DD:** turn `gcs-user-interface/` into a submodule. `git subtree split --prefix=gcs-user-interface` produces a branch with only the UI history, which can be pushed to a new `gcs-user-interface` repo and added back with `git submodule add`. No paths change in this step, because the folder is already self-contained.
+
+Using `git mv` in step 1 keeps each file's history. `git log --follow` and GitHub's blame view track the rename.
+
+### Alternatives considered
+
+#### [ALTERNATIVE 2] Keep package-lock.json
+
+Move it into the UI folder next to `bun.lock`.
+
+**Pros:**
+- Members who run `npm install` keep a lockfile.
+
+**Cons:**
+- Two lockfiles drift apart. `package-lock.json` is already older than `bun.lock`, and CI installs with `bun install --frozen-lockfile`, so the npm lockfile is never checked.
+- The README, CI and `tauri.conf.json` all already use Bun.
+
+#### [ALTERNATIVE 3] Name the folder ui/ instead of gcs-user-interface/
+
+**Pros:**
+- Shorter paths.
+
+**Cons:**
+- The GCS File Reorg DD names every subteam folder after its repo (`gcs-user-interface/`, `gcs-software-integration/`, `gcs-infrastructure/`). Using the repo name means nothing changes when the folder becomes a submodule.
+
+## Open questions
+
+- Do the leads agree to move `public/` instead of deleting it, given `index.html` loads `/vite.svg` from it and `Atlases/SLO/` is the only offline map data in the repo?
+- Who owns `flake.nix` and `flake.lock`? They set up the whole GCS dev environment, not just the UI.
+- Who owns `src-tauri/` as the shared app shell (`main.rs`, `tauri.conf.json`, capabilities, icons)? The DB DD asks the same question about the taurpc procedures. It could be UI, Database or GCS-wide.
+- Does `@tauri-apps/cli` 2.0.0 support `TAURI_APP_PATH` and `TAURI_FRONTEND_PATH`, or should the CLI be bumped? (See the caution in [package.json scripts](#packagejson-scripts).)
+
+### Existing issues found while assessing (not fixed by this move)
+
+These were found while tracing paths for the move. They don't block it and should be separate PRs:
+
+1. [`vite.config.ts`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/vite.config.ts) uses Tauri v1 variable names (`TAURI_PLATFORM`, `TAURI_DEBUG`). Tauri v2 sets `TAURI_ENV_PLATFORM` and `TAURI_ENV_DEBUG`, so source maps are never generated for debug builds. `build.target` is also set to the result of a comparison (`false`) instead of a browser target.
+2. Test and server-only packages (`mocha`, `chai`, `selenium-webdriver`, `tsx`, `express`, `ws`, `webpack`) are in `dependencies` instead of `devDependencies`, and some may be unused.
+3. `index.html` still has the template title "Tauri + Vue + TS".
+4. The root `.gitignore` has a `*spec` entry, which ignores any new file or folder whose name ends in "spec".
+
+## Unit/End to End Testing
+
+This is a refactor, so no new test cases are added. The move is done when all of the following work from inside `gcs-user-interface/`, on a fresh clone, with the services running:
+
+- `bun install --frozen-lockfile` succeeds without changing `bun.lock`.
+- `bun run lint` and `bun run format` give the same results as before the move.
+- `bun run build` passes. This runs `vue-tsc`, so it also confirms that `src/lib/bindings.ts` was generated in the new location.
+- `bun run tauri dev` opens both windows (Camera Screen and Over View), and the map, mission and telemetry views load data. `VITE_MAP_DEBUG=true` in the root `.env` turns on the map debug output, which confirms `envDir` works.
+- `bun run tauri build` produces a bundle that loads the frontend from `gcs-user-interface/dist`.
+- `bun run test` passes the existing e2e specs (`map-annotations.spec.ts`, `mission-menu.spec.ts`) locally and in the GitHub Actions workflow.
+- After the DB DD's step 8 and the SI move, `bun run tauri dev` still writes `bindings.ts` into `gcs-user-interface/src/lib/`.
