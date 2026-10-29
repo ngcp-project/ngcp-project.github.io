@@ -94,6 +94,18 @@ This alternatives proposes a solution to acquiring weather data directly from th
 
 - If the GCS loses connection to the weather station, weather data messages get dropped
 
+**Weather Data Struct**
+
+```rust
+pub struct WeatherData {
+    pub wind_direction: f32,
+    pub wind_speed: f32,
+    pub cloud_coverage: f32,
+    pub rain_level: f32,
+    pub temperature: Option<f32>,
+}
+```
+
 ## Unit/End to End Testing
 List out what cases and edge cases you will be testing. If you are refactoring, no need to list the cases, just make sure it passes existing test cases. 
 
