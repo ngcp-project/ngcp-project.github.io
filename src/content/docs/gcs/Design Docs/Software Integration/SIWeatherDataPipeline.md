@@ -84,6 +84,16 @@ This alternatives proposes a solution to acquiring weather data directly from th
 **Cons:**
 - List out cons if applicable
 
+**Assumptions:** 
+- The microcontroller has brought up all sensors
+- The microcontroller is continuously polling the sensors
+- The microcontroller alerady combines weather data into a single message
+- The microcontroller is continuously writing weather data over USB
+
+**Limitations:** 
+
+- If the GCS loses connection to the weather station, weather data messages get dropped
+
 ## Unit/End to End Testing
 List out what cases and edge cases you will be testing. If you are refactoring, no need to list the cases, just make sure it passes existing test cases. 
 
