@@ -76,7 +76,9 @@ IF there is more than one method of achieving the same goal, here you will descr
 - List out cons if applicable
 
 #### [ALTERNATIVE 1] Read Weather Data Directly
-This alternatives proposes a solution to acquiring weather data directly from the weather station. This is to be done by directly reading weather data from a USB port connected to the weather station and returning a struct containing weather data. 
+This alternatives proposes a solution to acquiring weather data directly from the weather station. This is to be done by directly reading weather data from a serial connection over USB, parsing the data, and returning a struct containing weather data. 
+
+The struct and functions required to do this will exist in a new file called `weather_telemetry.rs`. This file should live in `placeholder/placeholder2`.
 
 **Pros:**
 - List out pros if applicable
