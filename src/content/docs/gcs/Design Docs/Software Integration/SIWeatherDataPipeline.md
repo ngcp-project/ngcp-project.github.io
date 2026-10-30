@@ -103,6 +103,10 @@ The struct and functions required to do this will exist in a new file called `we
 
 **Weather Data Struct**
 
+After the weather station's messages get read and parsed, its values are represented in a `WeatherData` struct.
+
+The fields within the struct are according to the 2026-2027 requirements.
+
 ```rust
 pub struct WeatherData {
     pub wind_direction: f32,
