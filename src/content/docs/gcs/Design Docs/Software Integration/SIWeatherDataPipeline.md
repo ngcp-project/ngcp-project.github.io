@@ -117,6 +117,44 @@ pub struct WeatherData {
 }
 ```
 
+**Get Weather Data Function**
+
+The `get_weather_data()` function will read one complete message from the serial connection. It will then pass the message to `parse_weather_data()` and return the resulting `WeatherData` struct to the GCS application.
+
+The function assumes that the GCS has already established the serial connection. Its responsibility is to read and process one message rather than manage the connection.
+
+```rust
+// This is placeholder code but the intended process is:
+// 1. A buffered reader reads one line containing a message
+// 2. The message is stored as a String
+// 3. The string is passed to parse_weather_data()
+// 4. A WeatherDataStruct is returned
+pub fn get_weather_data<R: BufRead>(
+    reader: &mut R,
+) -> Result<WeatherData, WeatherDataError> {
+    let mut message = String::new();
+
+    reader.read_line(&mut message)?;
+
+    parse_weather_data(&message)
+}
+```
+**Parse Weather Data Function**
+
+The `parse_weather_data()` function will convert the read message transmitted by the weather station into a `WeatherData` struct. It will identify the fields in the message, convert their values to the appropriate data types, and return an error if the message is missing the required fields or contains invalid data.
+
+```rust
+// This is also placeholder code and should be updated before this branch is merged
+// The function parses the message according to the format provided by the infrastructure team
+// The function returns WeatherData if all required fields are valid
+fn parse_weather_data(
+    message: &str,
+) -> Result<WeatherData, WeatherDataError> {
+
+}
+```
+
+
 ## Unit/End to End Testing
 List out what cases and edge cases you will be testing. If you are refactoring, no need to list the cases, just make sure it passes existing test cases. 
 
