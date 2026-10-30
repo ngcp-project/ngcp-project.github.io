@@ -66,16 +66,8 @@ MyProgram {
 ```
 ### Example: Alternatives
 
-#### [PREFERRED] Implementation 1 Title
-IF there is more than one method of achieving the same goal, here you will describe your preferred implementation in detail using diagrams, code blocks, etc.  
+#### [PREFERRED] Read Weather Data Directly
 
-**Pros:**
-- List out pros if applicable
-
-**Cons:**
-- List out cons if applicable
-
-#### [ALTERNATIVE 1] Read Weather Data Directly
 This alternatives proposes a solution to acquiring weather data directly from the weather station. This is to be done by directly reading weather data from a serial connection over USB, parsing the data, and returning a struct containing weather data. 
 
 The struct and functions required to do this will exist in a new file called `weather_telemetry.rs`. This file should live in `placeholder/placeholder2`.
@@ -154,6 +146,14 @@ fn parse_weather_data(
 }
 ```
 
+#### [ALTERNATIVE 1] Alternative Implementation 1 Title
+Then you will describe an alternative implementation with it's pros and cons. List as many alternative sections as needed. You may have multiple subsections of preferred and alternaitve implementations for different parts of your solution. 
+
+**Pros:**
+- List out pros if applicable
+
+**Cons:**
+- List out cons if applicable
 
 ## Unit/End to End Testing
 List out what cases and edge cases you will be testing. If you are refactoring, no need to list the cases, just make sure it passes existing test cases. 
