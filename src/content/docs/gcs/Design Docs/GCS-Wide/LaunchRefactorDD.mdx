@@ -1,0 +1,645 @@
+---
+title: Launch Refactor Design Doc
+description: DD for starting the whole GCS with one command, from one Docker Compose project, with a map server that starts in seconds
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+**Author(s):** Roberto M. Castro
+
+**Related Teams:** User Interface, Database, Software Integration, Infrastructure
+
+**PR Link:** `<add once the PR is open>`
+
+**Status:** Draft for review, 2026-10-23. Fills the Centralized Start section of the [GCS File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/GCSFileReorgDD/src/content/docs/gcs/Design%20Docs/GCS-Wide/GCSFileReorgDD.mdx). Code references are to gcs-desktop-app commit [deb007b](https://github.com/ngcp-project/gcs-desktop-app/tree/deb007bc80a09e3cb0d353edf633b2fb8b6005bb) and GCS-Integration-Library-2025-26 commit [077bf1d](https://github.com/ngcp-project/GCS-Integration-Library-2025-26/tree/077bf1dbb88307fc44a9181a9ccbbbbcc541b19a). The other design docs were read on their branches, whose tips were unchanged on GitHub on 2026-10-23.
+
+## Summary
+
+This doc proposes how the GCS starts once every subteam has its submodule: one command, `python start/start.py`, brings up the whole stack. Every service runs as a container in one Docker Compose project named `ngcp-gcs`, built from one compose file per subteam. The Tauri app runs on the host, and so does the XBee bridge on Windows and macOS, because Docker there can't reach a USB radio without extra setup. The map server, which today can take an estimated 30 to 90 minutes to set up and errors on every launch, is replaced by a small bundle of pre-rendered tiles for the airfield that starts in under a second and works without internet.
+
+Decisions and asks:
+
+- GCS leads: answer the six [open questions](#open-questions) by `<date>`, ideally before the Requirements Review TIM in early November 2026. The one that blocks other DDs is where the compose file lives: a root `compose.yaml` (this doc) or `start/docker-compose.yml` (GCS, UI and Database DDs).
+- Software Integration: read the RabbitMQ address, credentials and XBee port from the environment instead of hard-coding `localhost` and `COM5` ([Software Integration services](#software-integration-services)). This can start now, before the SI reorg.
+- User Interface: review the map changes in [Building the airfield map in the UI repo](#building-the-airfield-map-in-the-ui-repo).
+
+Risk: a teammate who loses the map volume today waits through an estimated 30 to 90 minute import and about 1.7 GB of downloads. SYS_18 requires any component to be running again within 15 minutes of a failure. Step 1 of the [migration order](#migration-order) cuts that to an estimated 5 to 20 minutes and needs no reorg; Tier 4 cuts it to seconds.
+
+## Contents
+
+1. [Summary](#summary)
+2. [Scope](#scope)
+3. [Background](#background)
+   - [How the GCS starts today](#how-the-gcs-starts-today)
+   - [RFP Requirement(s)](#rfp-requirements)
+4. [Solution](#solution)
+5. [Design/Implementation](#designimplementation)
+   - [Assumptions](#assumptions)
+   - [Final file structure](#final-file-structure)
+   - [Root compose file](#root-compose-file)
+   - [Profiles](#profiles)
+   - [Software Integration services](#software-integration-services)
+   - [Launcher](#launcher)
+   - [Map server](#map-server)
+   - [Migration order](#migration-order)
+   - [Alternatives considered](#alternatives-considered)
+6. [How this fits the other design docs](#how-this-fits-the-other-design-docs)
+7. [Open questions](#open-questions)
+8. [Unit/End to End Testing](#unitend-to-end-testing)
+9. [Appendix A: Conflicts with the other design docs](#appendix-a-conflicts-with-the-other-design-docs)
+10. [Appendix B: How the tile server image works](#appendix-b-how-the-tile-server-image-works)
+
+## Scope
+
+In scope: the Compose project, `start/start.py` and `start/setup.py`, the Compose profiles, how each service and host process is started and configured, and the map tile server.
+
+Out of scope: which files move where (each subteam's file reorg DD), the Postgres service itself (the [Database File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/6425bdd8987779d8993765e1bde3a8ca986c328c/src/content/docs/gcs/Design%20Docs/Database/DBFileReorgDD.mdx#postgres-container) covers its volume, healthcheck and settings), and SI's code changes beyond reading its settings from the environment.
+
+## Background
+
+The GCS File Reorg DD asks for a centralized start that "should execute all the required programs to easily start the GCS", and lets each subteam "provide their own centralized start that can be executed by the gcs start process". Its Centralized Start section is still a TODO assigned to this author. This doc fills it.
+
+### How the GCS starts today
+
+Four services are defined in [`docker-compose.yml`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/docker-compose.yml):
+
+| Service | Image | Purpose | Problems |
+| --- | --- | --- | --- |
+| `osm-setup` | `overv/openstreetmap-tile-server` (unpinned) | One-time import of `socal-latest.osm.pbf` into the tile server's own Postgres | Downloads and imports all of Southern California. Starts again, and fails, every time `osm-server` starts (M1). |
+| `osm-server` | same | Renders PNG tiles on request, port `8080` | `depends_on: osm-setup` without a condition. No volume for rendered tiles. |
+| `db` | `postgres` (unpinned) | Mission database, port `5433` | No named volume and no healthcheck (the Database DD fixes both). |
+| `rabbitmq` | `rabbitmq:3.12-management` | Broker between Rust and Python, `5672`/`15672` | No healthcheck. |
+
+Three processes run outside Docker:
+
+| Process | Started by | Hard-coded endpoints |
+| --- | --- | --- |
+| Tauri app (Vue and Rust) | `bun tauri dev` | Postgres `localhost:5433` in five places; AMQP `localhost:5672` in three, one of which ([commands.rs:88](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src-tauri/src/commands/commands.rs#L88)) can be overridden with `AMQP_ADDR`; map tiles from `http://localhost:8080/tile/{z}/{x}/{y}.png` ([MapStore.ts:33](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src/lib/MapStore.ts#L33)) |
+| OpenCV sidecar | Tauri `sidecar("opencv")` | Not bundled today |
+| SI XBee bridge | By hand, from an IDE or as `python SoftwareIntegration/xbee_gcs.py` (not documented) | `COM5` ([xbee_gcs.py:292](https://github.com/ngcp-project/GCS-Integration-Library-2025-26/blob/077bf1dbb88307fc44a9181a9ccbbbbcc541b19a/SoftwareIntegration/xbee_gcs.py#L292)); RabbitMQ on `localhost` with user and password `admin` ([CommandListener.py:20-21](https://github.com/ngcp-project/GCS-Integration-Library-2025-26/blob/077bf1dbb88307fc44a9181a9ccbbbbcc541b19a/SoftwareIntegration/RabbitMQ/CommandListener.py#L20-L21), [TelemetryPublisher.py:8-18](https://github.com/ngcp-project/GCS-Integration-Library-2025-26/blob/077bf1dbb88307fc44a9181a9ccbbbbcc541b19a/SoftwareIntegration/RabbitMQ/TelemetryPublisher.py#L8-L18)) |
+
+The only launcher is [`start.sh`](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/start.sh). It runs `bun run osm:run` in the background and then `bun run tauri`. It doesn't start `db`, `rabbitmq` or the SI bridge, and it only runs in bash. The [README](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/README.md) warns that a plain `docker compose up` "will cause the map server to fail", so developers start each container with its own command.
+
+### RFP Requirement(s)
+
+From the 2026-27 Draft RFP (RevA) and its requirements sheet:
+
+| Requirement | This design provides | Also needs |
+| --- | --- | --- |
+| [SYS_18] Any component repaired and running within 15 minutes of a failure | One command that restarts every service and waits for its healthcheck; a map restored in seconds from a tile bundle instead of re-imported | A timed restart test ([Testing](#unitend-to-end-testing)) |
+| [SYS_23] Telemetry and commands independent of Wi-Fi | Once images and tiles are on the laptop, the stack starts and the map loads with no network | SI's radio link |
+| [GCS_05], [GCS_12] Vehicle positions, zones and mission locations on a map | A map that loads offline and keeps the operator inside the flight area | UI display |
+| [GCS_17] Reuse the legacy codebase (a "should") | The same services and images; only how they start changes | None |
+
+No requirement sets a map size, names a flying site, or requires offline maps. The map size in this doc comes from GCS_18, ERU_13, MRA_09 and MEA_07 ([Airfield-only map](#airfield-only-map-instead-of-all-of-southern-california)).
+
+## Solution
+
+`docker compose up` from the superproject root starts every service as a sibling container on one network, under one project name (`ngcp-gcs`). A root `compose.yaml` holds only that name and an `include:` list of each subteam's compose file, so each team edits its own file and the root changes only when a submodule is added or removed.
+
+`start/start.py` wraps that in one command: it checks Docker, starts the containers and waits until they are healthy, then starts the host processes (Tauri, and the XBee bridge where a container can't reach the radio). `start/setup.py` does the one-time work per machine.
+
+The map is fixed in four tiers, cheapest first. The end state (Tier 4) serves about 560 pre-rendered PNG tiles for the airfield from a small static container or from the app itself, so no map database or renderer runs at launch.
+
+## Design/Implementation
+
+### Assumptions
+
+- Each subteam has finished its file reorg and owns one git submodule under one superproject. The shared libraries are separate submodules that no subteam owns.
+- The shared Python libraries (`gcs-packet`, `xbee-python`, `gcs-infrastructure`) are checked out once, at the superproject level, not nested inside other submodules.
+- Docker Desktop (Windows, macOS) or Docker Engine (Linux) with Compose 2.24.4 or later (`include:` needs 2.20, and the `!override` tag used below needs 2.24.4). `docker compose version` shows the version.
+- The Tauri window runs on the host, not in a container. It is a native GUI app that needs WebKit or WebView2, a display and the GPU.
+- Real XBee radios are USB serial devices. Docker Desktop can pass one into a Linux container only with extra setup: `usbipd-win` on Windows, or Docker Desktop's USB/IP support with a separately run USB/IP server. Anything that talks to a radio must be able to run on the host.
+
+### Final file structure
+
+Names follow the GCS File Reorg DD, the Database DD (`gcs-backend`) and the UI DD (`src-tauri/` stays at the root). Two things differ from the GCS DD: the compose file is at the root, and `setup.py` moves into `start/` ([Alternatives considered](#alternatives-considered)).
+
+<FileTree>
+- gcs-desktop-app/ (superproject)
+  - compose.yaml (project name and `include:` only)
+  - .env.example (one env file for every service and host process)
+  - start/
+    - start.py (launcher, Python standard library only)
+    - setup.py (one-time setup: submodules, venv, `bun install`, map data)
+  - src-tauri/ (shared Tauri shell, stays at the root per the UI DD)
+  - gcs-user-interface/ (submodule: Vue app)
+    - map/
+      - compose.yaml (`osm-import`, `map`, `map-static`)
+  - gcs-backend/ (submodule: Rust backend)
+    - docker/
+      - compose.yaml (`db`, `rabbitmq`, `pgadmin`)
+  - gcs-software-integration/ (submodule)
+    - Dockerfile (`python:3.12-slim` plus requirements; version to confirm)
+    - docker/
+      - compose.yaml (`si-bridge`, `si-sim`)
+  - gcs-infrastructure/ (submodule: a library, no container)
+  - lib/
+    - gcs-packet/ (submodule)
+    - xbee-python/ (submodule)
+</FileTree>
+
+### Root compose file
+
+```yaml
+# compose.yaml
+name: ngcp-gcs                 # fixes volume names no matter which folder compose runs from
+
+include:
+  - gcs-backend/docker/compose.yaml
+  - gcs-user-interface/map/compose.yaml
+  - gcs-software-integration/docker/compose.yaml
+```
+
+Relative paths in an included file resolve from that file's folder, so `./data/...` in `map/compose.yaml` means `gcs-user-interface/map/data/`.
+
+### Profiles
+
+Profiles decide which optional services start:
+
+| Profile | Services | When |
+| --- | --- | --- |
+| none (default) | `db`, `rabbitmq` and the map: `map` (the renderer) until Tier 4 lands, then `map-static` | Every run |
+| `sim` | `si-sim`, SI's planned `hardware_sim`, which simulates the vehicles without XBees | No radios: UI and backend work, CI, demos |
+| `hardware-linux` | `si-bridge`, with the radio passed in as `/dev/xbee` | Linux laptops with radios plugged in |
+| `tools` | `pgadmin` | Debugging the database |
+| `map-build` | `osm-import`, the one-time map import; after Tier 4 also `map` | First setup, or when the map area changes |
+
+`map` and `map-static` both use port 8080, so only one of them is in the default set at a time.
+
+### Software Integration services
+
+```yaml
+# gcs-software-integration/docker/compose.yaml
+services:
+  si-sim:
+    build:
+      context: ../..                         # superproject root, so lib/ is reachable
+      dockerfile: gcs-software-integration/Dockerfile
+    profiles: ["sim"]
+    command: ["python", "-m", "test.hardware_integration.hardware_sim"]
+    environment:
+      AMQP_HOST: rabbitmq                    # service name inside the network, not localhost
+      AMQP_USER: ${AMQP_USER:-admin}
+      AMQP_PASSWORD: ${AMQP_PASSWORD:-admin}
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+
+  si-bridge:
+    extends: si-sim
+    profiles: !override ["hardware-linux"]   # extends merges lists; without !override this also gets "sim"
+    command: ["python", "-m", "src.hardware_integration.main"]
+    environment:
+      XBEE_PORT: /dev/xbee
+    devices:
+      - "${XBEE_PORT:-/dev/ttyUSB0}:/dev/xbee"
+```
+
+`extends` merges `profiles`. Without `!override`, `si-bridge` inherits `sim`, and `--profile sim` would start it and fail without a radio at `/dev/ttyUSB0` (checked on 2026-10-23 with `docker compose --profile sim config --services` on Compose 5.5.1).
+
+The build context is the superproject root because the Dockerfile must copy `lib/` and `gcs-infrastructure/` for its `pip install`. Those paths depend on open question 3.
+
+What SI needs to change or confirm:
+
+- Read `AMQP_HOST`, `AMQP_USER`, `AMQP_PASSWORD` and `XBEE_PORT` from the environment, with defaults from the shared `.env`. Today the code hard-codes `localhost` and `COM5`. Inside a container `localhost` is the container itself, so the bridge would never reach the broker. SI's `.env` holds only the XBee emulator's MQTT settings (host, port, keepalive), which `lib/xbee-python` reads; nothing reads RabbitMQ or radio settings from it.
+- `python -m test.hardware_integration.hardware_sim` works only if SI adds `hardware_sim/__main__.py`, which the SI DD doesn't plan yet. The SI DD also doesn't say whether the simulator publishes to RabbitMQ itself. If it doesn't, `si-sim` needs the bridge as well.
+- The `python:3.12-slim` base is a guess. The SI [README](https://github.com/ngcp-project/GCS-Integration-Library-2025-26/blob/077bf1dbb88307fc44a9181a9ccbbbbcc541b19a/README.md) (line 17) says `gcs-packet` needs a patch on Python 3.11 and later.
+
+### Launcher
+
+`start/start.py` uses only the Python standard library, since SI already needs Python on every machine. It:
+
+1. Checks that Docker is running and Compose is 2.24.4 or later, and exits with a clear message if not.
+2. Runs `git submodule update --init`, non-recursive so nested copies of the shared libraries aren't checked out.
+3. Runs `docker compose <--profile ...> up --wait db rabbitmq`, which starts the database and broker in the background and blocks until both are healthy. This replaces the per-container commands in the README.
+4. Runs `docker compose <--profile ...> up -d` for the rest, including the map, without waiting for them. Until the map is ready the UI shows a blank map, or online tiles once `VITE_TILE_URL` exists.
+5. Starts the host processes: the SI bridge on the host when `--hardware` is set on Windows or macOS (port from `XBEE_PORT` in `.env`), and `bun tauri dev` in `gcs-user-interface/`, whose `tauri` script points the Tauri CLI at `../src-tauri` (UI DD).
+6. On Ctrl+C, stops the host processes and runs `docker compose stop`. `stop` keeps each container's own files (for example rendered tiles until M2 is fixed), which `down` would delete.
+
+| Flag | Effect |
+| --- | --- |
+| none | `db`, `rabbitmq`, the map, then the UI |
+| `--sim` | Adds profile `sim` (`si-sim`) |
+| `--hardware` | Real radios. Linux: adds profile `hardware-linux` (`si-bridge` container). Windows and macOS: runs the SI bridge on the host from the venv |
+| `--tools` | Adds profile `tools` (`pgadmin`) |
+| `--map-only` | Starts only `map`. Replaces `bun run osm:run` |
+
+```bash
+python start/setup.py            # once per machine
+python start/start.py            # every time; flags above
+```
+
+### Map server
+
+#### Why the map is slow
+
+| # | Cause | Evidence | Effect |
+| --- | --- | --- | --- |
+| M1 | **The import starts again on every launch.** `osm-server` has `depends_on: [osm-setup]` with no condition, so `docker compose up osm-server` (what `bun run osm:run` and `start.sh` call) also starts `osm-setup`. The image's `run.sh` uses `set -euo pipefail` and runs `createuser renderer` before downloading anything, so the second import fails within seconds with "role renderer already exists" and doesn't re-download or re-import. | [docker-compose.yml](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/docker-compose.yml), image [`run.sh`](https://github.com/Overv/openstreetmap-tile-server/blob/v2.3.0/run.sh) | A failed container and an error on every launch. The real cost is the first import (M4, M7) and any rebuild after the volume is lost. |
+| M2 | **Rendered tiles are thrown away.** Only `/data/database/` is a volume. The tile cache (`/data/tiles/` in current images) lives in the container's own files. | same | Every new container renders every tile again on first view, so the map looks slow even after the server is up. |
+| M3 | **Tiles are drawn on demand.** `renderd` and Mapnik draw each 256 px tile the first time it is requested. | image behaviour | The first pan or zoom over a new area is slow. |
+| M4 | **The extract is far larger than the area we fly.** `socal-latest.osm.pbf` covers all of Southern California. The map's default origin is in Chino ([MapStore.ts:32](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src/lib/MapStore.ts#L32)). | same | A long download, a multi-GB database and an import estimated at 30 minutes or more. |
+| M5 | **The image is unpinned** (`overv/openstreetmap-tile-server` with no tag). | same | A new upstream release can change the data layout and force a re-import. |
+| M6 | **The project name depends on the folder.** The volume is `gcs-desktop-app_osm-data` today. If compose runs from `start/` without a `name:`, it becomes `start_osm-data`, which is empty. | Compose default naming | Every developer re-imports once after the reorg. Fixed by `name: ngcp-gcs` plus a one-time volume copy ([Migration order](#migration-order), step 2). |
+| M7 | **Every fresh import downloads about 1.06 GB of worldwide map data**, whatever the region size. After `osm2pgsql`, `run.sh` runs openstreetmap-carto's `get-external-data.py`, which fetches the files listed in carto's `external-data.yml`: `water-polygons-split-3857.zip` alone is 931 MB (measured 2026-10-02), plus 24 MB of simplified water polygons, the Antarctica icesheet files and Natural Earth data. The script keeps no file cache and decides whether to skip only from metadata in the map database, which is wiped with `osm-data`. | image `run.sh`; carto [`external-data.yml`](https://github.com/gravitystorm/openstreetmap-carto/blob/v5.4.0/external-data.yml) (v5.4.0) | More download than the 672 MB SoCal extract. Clipping doesn't remove it. Pointing `external-data.yml` (in the `osm-style` volume) at a local mirror, or at small clipped water files for an inland site, does. With Tier 4 only the maintainer who builds the tiles pays it. |
+
+[Appendix B](#appendix-b-how-the-tile-server-image-works) explains how the image's `import` and `run` commands work.
+
+#### Fixes, cheapest first
+
+| Tier | What | Fixes | Work |
+| --- | --- | --- | --- |
+| 1 | Config-only fixes to the current server: move the import to a `map-build` profile, keep rendered tiles in a volume, pin the image | M1, M2, M5 | About an hour |
+| 2 | Import only the airfield, not all of Southern California | M4 | About an hour |
+| 3 | Pre-render the tiles the UI uses (zoom 14 to 16) | M3 | Done once; seconds to run (est.) |
+| 4 (recommended end state) | Export those tiles and serve them as static files, with no renderer at run time | M7 for everyone but the maintainer; removes the second Postgres | Medium |
+
+#### Tier 1: config-only fixes (about an hour)
+
+The file is `map/compose.yaml` in the UI repo, which becomes `gcs-user-interface/map/compose.yaml` after the reorg:
+
+```yaml
+# map/compose.yaml
+services:
+  osm-import:
+    image: overv/openstreetmap-tile-server:2.3.0     # or the digest of your local image, see below
+    profiles: ["map-build"]                          # never runs on a normal `up`
+    volumes:
+      - osm-data:/data/database/
+      - osm-style:/data/style/                       # compiled mapnik.xml; editable external-data.yml (M7)
+      - ./data/region.osm.pbf:/data/region.osm.pbf:ro   # clipped extract (Tier 2)
+    command: "import"
+
+  map:
+    image: overv/openstreetmap-tile-server:2.3.0
+    shm_size: 1gb
+    ports: ["8080:80"]
+    volumes:
+      - osm-data:/data/database/
+      - osm-style:/data/style/
+      - osm-tiles:/data/tiles/                       # M2: keep rendered tiles
+    command: "run"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/tile/0/0/0.png"]
+      interval: 5s
+      retries: 60
+
+volumes:
+  osm-data:
+  osm-style:
+  osm-tiles:
+```
+
+- Pin with care. `latest` has been built from master with PostgreSQL 15 since 2023-03-18, and `v2.3.0` uses PostgreSQL 14, so an `osm-data` volume created by `latest` won't start under `2.3.0`. Either pin to the digest of the image you already have (`docker image inspect --format '{{index .RepoDigests 0}}' overv/openstreetmap-tile-server`) or pin `2.3.0` and re-import.
+- `setup.py` runs `docker compose --profile map-build run --rm osm-import` only if the `osm-data` volume doesn't exist or the extract changed. A hash of the `.pbf` in a marker file tells which. The import can't run again on an existing volume (`createuser renderer` fails), so a changed extract means removing `osm-data` first.
+- Run on its own, outside the root project, this file needs `-p ngcp-gcs` so its volumes are the same `ngcp-gcs_osm-*` ones.
+
+#### Tier 2: import only the airfield (about an hour)
+
+Clip the extract to a box around each site we fly from: about 10 × 10 km with the UI's current zoom limits, or smaller if the minimum zoom is raised (next section). The example is centred on the map's default origin; confirm the real site coordinates with leads first:
+
+```bash
+osmium extract -b -117.685,33.888,-117.577,33.978 --strategy smart socal-latest.osm.pbf -o map/data/region.osm.pbf
+```
+
+Commit the bounding boxes, not the `.pbf`. [Building the airfield map](#building-the-airfield-map-in-the-ui-repo) gets the clip without downloading all of SoCal.
+
+#### Tier 3: pre-render the tiles the UI uses (seconds, done once)
+
+The UI only asks for zoom 14 to 16 ([Map.vue:14-15](https://github.com/ngcp-project/gcs-desktop-app/blob/deb007bc80a09e3cb0d353edf633b2fb8b6005bb/src/components/Map.vue#L14-L15)). For the 10 × 10 km example box that is 560 tiles (30 + 110 + 420), an estimated 10 MB. Requesting each tile from the running server makes `renderd` draw and cache it. The tiles go into the `osm-tiles` volume and survive restarts (M2).
+
+#### Tier 4 (recommended end state): serve static tiles
+
+Once the tiles exist, Postgres, Mapnik, `renderd` and Apache aren't needed at run time:
+
+- Export by fetching each tile over HTTP from the running server into `{z}/{x}/{y}.png`, optionally packed into one `.mbtiles` or `.pmtiles` file. The server's own cache is in metatile (`.meta`) format and can't be copied out as PNGs.
+- Serve them with a small container (`nginx:alpine` for a folder; `tileserver-gl-light` or `pmtiles serve` for a single file), or have Tauri serve them from app resources with no container at all.
+- Keep the URL shape `/tile/{z}/{x}/{y}.png`, so `MapStore.ts` keeps working. Better, read it from `VITE_TILE_URL`, so a developer can point at online OSM tiles (development only, under the OSM tile usage policy) or a local server.
+- Publish the tile bundle as a GitHub release asset or as an image on GHCR (`ghcr.io/ngcp-project/gcs-tiles:<area>-<date>`). One airfield at zoom 14 to 16 is an estimated 10 MB, a download of seconds instead of an import.
+
+The map container then starts in under a second, startup is the same with or without a network (the field may have none), and the 1 GB `shm_size` and the second Postgres go away. That frees memory on a laptop that also runs Tauri, the mission database and RabbitMQ at Demo Day. A new flight area means re-exporting, which is a scripted `map-build` step.
+
+#### Airfield-only map instead of all of Southern California
+
+Today `osm-setup` downloads and imports the Geofabrik `socal-latest` extract, which covers all of Southern California. The mission happens on one airfield.
+
+The requirements point to a small flight area, though none caps it. GCS_18 requires the radio link to hold over a radius of at least 750 ft (about 230 m). ERU_13 gives the ground vehicle a range of 1000 ft (about 300 m) fully loaded. The aircraft fly for at least 20 minutes (MRA_03, MEA_04), but only inside the keep-in geofences the GCS sends (MRA_09, MEA_07, GCS_13). These are minimums, not limits, so the vehicle teams need to confirm how large an area they fly in (open question 5). If the vehicles stay near those distances, a box a few kilometres across covers the mission.
+
+The display needs more than the mission does. The tile layer is limited to zoom 14 to 16. At zoom 14 and this latitude one 256 px tile is about 2 km wide, so a 1200 px wide map shows about 9.5 km across, and anything outside the clipped box shows as blank tiles. Two ways to handle it:
+
+- Clip about 10 × 10 km per site and keep the current zooms.
+- Raise the minimum zoom to 15 (about 4.8 km across) and clip about 5 × 5 km.
+
+Either way, also lock panning to the box with Leaflet `maxBounds`. The table uses the 10 × 10 km option. The SoCal extract (672 MB on 2026-10-23; it changes as OSM is edited) and the shapefile sizes (checked again on 2026-10-23) were measured from HTTP `Content-Length`. Values marked "est." are estimates for a typical laptop, because Docker wasn't running when they were taken.
+
+| | Today (all SoCal) | Tier 1 (all SoCal) | Airfield and Tiers 1 to 3 | Airfield and Tier 4 |
+| --- | --- | --- | --- | --- |
+| Area | ~226,000 km² (Geofabrik's extract polygon) | same | 100 km² | 100 km² |
+| `.osm.pbf` download | 672 MB: about 2 min at 50 Mbps, about 9 min at 10 Mbps | same | est. 5 to 15 MB: seconds | none (maintainer only) |
+| Tile-server Postgres on disk | est. 8 to 15 GB | same | est. a few hundred MB | none |
+| `osm2pgsql` import and indexes | est. 30 to 90 min | same, once | est. 1 to 3 min | none |
+| carto shapefiles (M7) | ~1.06 GB on every fresh import, plus loading into Postgres (est. several minutes) | same | same, unless served from a local mirror | none |
+| Tiles at zoom 14 to 16 | est. 0.74 to 1.15 million (est. 11 to 17 GB), so only on-demand rendering is practical | same | 560 (est. ~10 MB), all pre-rendered | the same 560 as a bundle |
+| First setup, a new teammate, or a rebuild after `down -v` or the M6 rename | ~1.7 GB of downloads and an est. 30 to 90 min import | same | est. 5 to 20 min; the shapefiles alone take about 3 min at 50 Mbps and 14 min at 10 Mbps | seconds (est. ~10 MB bundle) |
+| Every normal launch | failed re-import (M1), then Postgres and `renderd` start | seconds | seconds | under 1 s |
+| First pan or zoom over an area | rendered tile by tile, often seconds per screen (est.) | rendered once, then kept (`osm-tiles`) | instant | instant |
+| At the field without internet | works only if the volume survived | same | works | works |
+| Work | none | low | low | medium |
+
+To replace the estimates, run the import once with each extract and record:
+
+```bash
+time docker compose --profile map-build run --rm osm-import    # import time
+docker system df -v | grep osm                                  # volume size
+```
+
+Clipping removes the large import and makes pre-rendering practical. It doesn't remove the ~1.06 GB shapefile download (M7). Use the clip and Tier 1 together, and mirror the shapefiles locally or move to Tier 4 to get rid of M7. A small extract also lets the map run in CI and under the `sim` profile without a multi-GB volume.
+
+Trade-offs of clipping:
+
+- Panning away from the box shows blank tiles. Leaflet `maxBounds` stops the operator panning off it. If wider context is ever needed, add a coarse layer rendered once by a maintainer, or fall back to online tiles when the network is up (`VITE_TILE_URL`).
+- `osmium extract` needs the full SoCal file once. Fetching only the box from the Overpass API avoids that, or one maintainer clips it and publishes the small `.pbf` or tile bundle.
+- Each new site needs its box added. The RFP doesn't name the sites, so leads must list them (Cal Poly Pomona test field, Demo Day field, others). The example box is centred on the code's default origin, which is only a placeholder.
+
+#### Building the airfield map in the UI repo
+
+Proposed files (`gcs-user-interface/` after the reorg, `gcs-desktop-app/` until then):
+
+<FileTree>
+- gcs-user-interface/
+  - map/
+    - sites.json (committed: one entry per airfield with box, centre and zooms)
+    - compose.yaml (`osm-import` in profile `map-build`, `map`, `map-static`; included by the root `compose.yaml`)
+    - build-map.ts (Bun script: fetch, convert, import, render, export)
+    - data/ (gitignored: `region.osm`, `region.osm.pbf`)
+    - tiles/ (gitignored, or published as a release asset)
+  - src/
+    - lib/
+      - MapStore.ts (reads the active site from `map/sites.json`)
+</FileTree>
+
+`map/sites.json` is the single source for the box. The build script and Leaflet both read it, so the clipped area and the pannable area can't drift apart:
+
+```json
+{
+  "default": "origin",
+  "sites": {
+    "origin": {
+      "name": "Map default origin in Chino (placeholder: replace with the real site)",
+      "center": [33.932574, -117.630596],
+      "bbox": [-117.685, 33.888, -117.577, 33.978],
+      "minZoom": 14,
+      "maxZoom": 16
+    }
+  }
+}
+```
+
+`bbox` is `[west, south, east, north]`, the order both `osmium extract -b` and Overpass `bbox=` use.
+
+`bun run map:build -- --site origin` replaces `osm:setup`. Each step is skipped if its output already exists, unless `--force` is passed:
+
+1. Fetch only the box, with no 672 MB SoCal download:
+
+   ```bash
+   curl -o map/data/region.osm "https://overpass-api.de/api/map?bbox=-117.685,33.888,-117.577,33.978"
+   ```
+
+   Overpass returns every node in the box, complete ways that touch it, and relations that reference them (members outside the box may be missing). Expect an estimated tens of MB of OSM XML for 100 km² of suburb. Overpass is a shared public service, so run this once per site, not on every setup. If Overpass is down or too slow, download SoCal once and clip it with `osmium extract -b ... --strategy smart`, which keeps buildings and roads that cross the edge whole.
+
+2. Convert XML to PBF, because `run.sh` only reads `/data/region.osm.pbf`. The tile-server image already ships `osmium`, so nothing extra is installed:
+
+   ```bash
+   docker run --rm -v "<abs path>/map/data:/work" --entrypoint osmium \
+     overv/openstreetmap-tile-server:2.3.0 cat /work/region.osm -o /work/region.osm.pbf --overwrite
+   ```
+
+   Call Docker from the Bun script with an absolute path. In Git Bash on Windows, `-v /work` style paths get rewritten unless `MSYS_NO_PATHCONV=1` is set.
+
+3. Import. `import` can't run twice on one volume (M1), so remove the old database and tile volumes first. Run outside the root project, `map/compose.yaml` needs `-p ngcp-gcs` so these are the same volumes the root project uses:
+
+   ```bash
+   docker compose -p ngcp-gcs -f map/compose.yaml rm -s -f map
+   docker volume rm ngcp-gcs_osm-data ngcp-gcs_osm-tiles
+   docker compose -p ngcp-gcs -f map/compose.yaml --profile map-build run --rm osm-import
+   ```
+
+   `get-external-data.py` re-downloads the ~1.06 GB of shapefiles here, because its skip metadata lived in the deleted `osm-data` volume (M7).
+
+4. Pre-render and export. Start `map`, then request every tile in the box at the site's zooms. Each request makes `renderd` draw and cache the tile, and the script saves the PNG, which produces the Tier 4 bundle at the same time:
+
+   ```ts
+   const lon2x = (lon: number, z: number) => Math.floor(((lon + 180) / 360) * 2 ** z);
+   const lat2y = (lat: number, z: number) => {
+     const r = (lat * Math.PI) / 180;
+     return Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 2 ** z);
+   };
+
+   const [w, s, e, n] = site.bbox;
+   for (let z = site.minZoom; z <= site.maxZoom; z++) {
+     for (let x = lon2x(w, z); x <= lon2x(e, z); x++) {
+       for (let y = lat2y(n, z); y <= lat2y(s, z); y++) {      // north has the smaller y
+         const res = await fetch(`http://localhost:8080/tile/${z}/${x}/${y}.png`);
+         if (!res.ok) throw new Error(`tile ${z}/${x}/${y}: ${res.status}`);
+         await Bun.write(`map/tiles/${z}/${x}/${y}.png`, res);
+       }
+     }
+   }
+   ```
+
+   For the example box that is 560 requests. Run four or so at a time to match the server's `THREADS`.
+
+Three ways to serve the tiles:
+
+| Option | How | Run-time cost | Notes |
+| --- | --- | --- | --- |
+| A. Keep the renderer | `map` service with the `osm-tiles` volume (Tiers 1 to 3) | Postgres, Apache and `renderd`, ~1 GB shared memory | Needed only if someone wants to pan outside the pre-rendered box |
+| B. Static container | `map-static`: `nginx:alpine` with `./tiles` mounted at `/usr/share/nginx/html/tile:ro`, port `8080` | A few MB of RAM, starts in under 1 s | Same URL as today, so `MapStore.ts` needs no change |
+| C. No container | Copy `map/tiles/` to `public/tile/`. Vite serves it in development and Tauri bundles it. The URL becomes `/tile/{z}/{x}/{y}.png` | None | Adds an estimated 10 MB per site to the app. The UI DD keeps `public/`, so this works |
+
+Recommended: B for development, which makes the map a ~1 s start in the Compose project, and C for the Demo Day build, so the map works with Docker stopped. Keep A only as the `map-build` profile for whoever builds a new area.
+
+UI code changes, in `src/lib/MapStore.ts`:
+
+```ts
+import L from "leaflet";
+import sites from "../../map/sites.json";            // resolveJsonModule is already on in tsconfig.json
+
+const site = sites.sites[(import.meta.env.VITE_MAP_SITE ?? sites.default) as keyof typeof sites.sites];
+const DEFAULT_MAP_ORIGIN: LatLng = site.center as LatLng;
+const TILE_URL = import.meta.env.VITE_TILE_URL ?? "http://localhost:8080/tile/{z}/{x}/{y}.png";
+export const MAP_SITE = site;
+export const MAP_BOUNDS = L.latLngBounds([site.bbox[1], site.bbox[0]], [site.bbox[3], site.bbox[2]]);
+```
+
+And in `src/components/Map.vue`, where `LMap` in `@vue-leaflet/vue-leaflet` 0.10 accepts `minZoom`, `maxZoom`, `maxBounds` and `maxBoundsViscosity` as props, and `bounds` on the tile layer goes through `options`:
+
+```vue
+<l-map
+  :zoom="16"
+  :min-zoom="MAP_SITE.minZoom"
+  :max-zoom="MAP_SITE.maxZoom"
+  :max-bounds="MAP_BOUNDS"
+  :max-bounds-viscosity="1.0"
+  ...
+>
+  <l-tile-layer
+    :url="mapStore.mapState.localTileURL"
+    :min-zoom="MAP_SITE.minZoom"
+    :max-zoom="MAP_SITE.maxZoom"
+    :options="{ bounds: MAP_BOUNDS }"
+    attribution="&copy; OpenStreetMap contributors"
+    layer-type="base"
+    name="CustomTiles"
+  />
+```
+
+What these change:
+
+- `maxBounds` with viscosity 1.0 stops the operator panning off the clipped area. The 10 × 10 km box is only about 1,250 px wide at zoom 14, so a wider map window still shows blank edges at that zoom; widen the box or raise the minimum zoom for large screens.
+- The map inherits zoom 14 to 16 from the tile layer today. Setting the limits on `LMap` from `sites.json` makes them explicit and per site.
+- `bounds` on the tile layer stops Leaflet requesting tiles outside the box, so nothing triggers a render or a 404.
+- No attribution is shown today. OSM data is ODbL, and rendered tiles must credit "© OpenStreetMap contributors".
+
+In `package.json`, replace `osm:setup` and `osm:run` with `map:build` (`bun map/build-map.ts`) and `map:serve` (`docker compose -p ngcp-gcs -f map/compose.yaml up -d map-static`). The UI DD already removes the `osm:*` scripts.
+
+### Migration order
+
+Each step leaves the GCS runnable. Steps 1 to 4 need no reorg and can start now.
+
+| Step | Work | Depends on | Owner |
+| --- | --- | --- | --- |
+| 1 | Map quick fixes in the current repo: move the map services to `map/compose.yaml` (Tier 1), pin the image, move the import to the `map-build` profile, add the `osm-tiles` and `osm-style` volumes and a healthcheck, and switch to a clipped extract. Fixes M1, M2, M4 and M5. M7 stays until the shapefiles come from a local mirror or Tier 4 lands | Nothing | UI, `<owner>` |
+| 2 | Add healthchecks and volumes to `db` and `rabbitmq` (Database DD step 3 covers `db`) and `name: ngcp-gcs` to the existing compose file. Copy the map volume once (M6) with `docker run --rm -v gcs-desktop-app_osm-data:/from -v ngcp-gcs_osm-data:/to alpine cp -a /from/. /to/`, or re-import with the small Tier 2 extract | Nothing | Database, `<owner>` |
+| 3 | Make SI read `AMQP_HOST`, `AMQP_USER`, `AMQP_PASSWORD` and `XBEE_PORT` from the environment | SI's agreement on the names (also a Database DD open question) | SI, `<owner>` |
+| 4 | Add `start/start.py` and `start/setup.py` that work with the current layout. Delete `start.sh` in the same PR, so there is always a launcher | Steps 2 and 3 | `<owner>` |
+| 5 | Merge the design-doc branches (order in [Appendix A](#appendix-a-conflicts-with-the-other-design-docs), K12) and answer open questions 1 to 3. Point the GCS DD's Centralized Start section at this doc | Leads' answers | GCS leads |
+| 6 | Subteams split their submodules. Each adds its own compose file, and the root `compose.yaml` becomes `include:` only. Update the paths in `start.py` | Step 5 and each team's reorg | Each subteam |
+| 7 | The SI reorg lands with the new entry point (K8) and the `si-sim` and `si-bridge` services | Step 6 | SI |
+| 8 | Tier 4 maps, if chosen: export the tiles, publish them as a release asset or GHCR image, and read `VITE_TILE_URL` in `MapStore.ts` | Open question 4 | UI, `<owner>` |
+
+### Alternatives considered
+
+The request was "a single container with sub-containers". Docker doesn't nest containers well, so it has three readings, plus the GCS DD's placement of the compose file.
+
+#### [PREFERRED] One Compose project with a root compose file
+
+The design above: one `compose.yaml` at the superproject root that `include:`s each submodule's compose file, under the project name `ngcp-gcs`.
+
+**Pros:**
+- One image per job, and each service restarts and logs on its own.
+- Each subteam owns its compose file; the root file changes only when a submodule is added or removed.
+- `docker compose up` works from the root with no `-f`, because Compose looks for `compose.yaml` in the current folder.
+
+**Cons:**
+- Needs Compose 2.24.4 or later (`include:` and `!override`). `start.py` checks for it.
+
+#### [ALTERNATIVE 1] Compose file in `start/` (GCS DD)
+
+A single `start/docker-compose.yml`, as the GCS and UI DDs draw it.
+
+**Pros:**
+- Keeps all start files in one folder.
+
+**Cons:**
+- Without a `name:`, the project is called `start` and every volume is renamed, so the map import runs again (M6).
+- Relative build and volume paths must start with `../`, and `docker compose` from the root needs `-f start/docker-compose.yml`.
+- One central file means every team edits it.
+
+#### [ALTERNATIVE 2] One large image with a process supervisor
+
+Postgres, RabbitMQ, the tile server and the SI bridge in one image under `supervisord` or `s6`.
+
+**Cons:**
+- The map image already runs its own Postgres, Apache and `renderd`, so this means two Postgres servers in one image.
+- A multi-GB rebuild on any change, no per-service restart, and still no COM port on Windows.
+
+#### [ALTERNATIVE 3] Docker-in-Docker
+
+One outer container runs a Docker daemon that starts the others.
+
+**Cons:**
+- Needs `--privileged`, doubles image storage, and hides the inner containers from Docker Desktop.
+
+## How this fits the other design docs
+
+Five design docs touch how the GCS starts. Each is a draft on its own branch of the docs repo.
+
+| Design doc | Branch @ commit | What it says that affects launch |
+| --- | --- | --- |
+| [GCS File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/GCSFileReorgDD/src/content/docs/gcs/Design%20Docs/GCS-Wide/GCSFileReorgDD.mdx) | `GCSFileReorgDD` @ `f2d531c` | gcs-desktop-app becomes the superproject, with subteam submodules and shared ones in a top-level `lib/`; no submodule inside another. Deletes `.vscode/`, `public/` and `start.sh`. Draws `start/docker-compose.yml`. Setup and Start are TODOs; its setup snippet has typos (`gttos://`, `--recursivegit`) and Windows-only paths. Names the backend folder `gcs-databse/`. |
+| [Database File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/6425bdd8987779d8993765e1bde3a8ca986c328c/src/content/docs/gcs/Design%20Docs/Database/DBFileReorgDD.mdx) | `BackendFileReorgDD` @ `6425bdd` | Names the backend submodule `gcs-backend`. Its `docker/compose.yaml` holds Postgres with a named volume and a healthcheck, included from `start/docker-compose.yml`, and leaves RabbitMQ and the map to the GCS-wide and SI owners. One shared `.env` at the repo root. |
+| [UI File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/UIFileReorgDD/src/content/docs/gcs/Design%20Docs/User%20Interface/UIFileReorgDD.mdx) | `UIFileReorgDD` @ `aeaab3c` | UI moves to `gcs-user-interface/`; `src-tauri/` stays at the root as the shared shell. `bun run tauri` runs from the UI folder. Moves `public/` instead of deleting it. Removes the `osm:*` scripts. Draws `start/docker-compose.yml`. |
+| [SI File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/SIFileReorgDD/src/content/docs/gcs/Design%20Docs/Software%20Integration/SIFileReorgDD.mdx) | `SIFileReorgDD` @ `fc5e3b1` | Renames the repo to `gcs-software-integration`; `xbee_gcs.py` becomes `src/hardware_integration/main.py`; adds `test/hardware_integration/hardware_sim/`. Takes the Rust RabbitMQ and command code from `src-tauri`. Its tree has its own `lib/` with `gcs-infrastructure`, `gcs-packet` and `xbee-python`. Contains every `GCSFileReorgDD` commit. |
+| [Infra segment](https://github.com/ngcp-project/ngcp-project.github.io/blob/infraFileReorgDD/src/content/docs/gcs/Design%20Docs/Infrastructure/GCSFileReorg-Infra.md) | `infraFileReorgDD` @ `aea2aaa` | Infrastructure code "should be moved to the main repo". Its copy of the GCS DD is the text from before the GCS branch's later edits: it also deletes `index.html` and says infra needs no setup. The GCS branch has since deleted this segment's file (K12). |
+
+The conflicts that block one-command launch are where the compose file lives (open question 2), where the shared Python libraries live (K3, open question 3), SI's hard-coded endpoints (K4) and real radios in Docker on Windows and macOS (K5). [Appendix A](#appendix-a-conflicts-with-the-other-design-docs) lists all of them with a resolution for each.
+
+## Open questions
+
+| Question | Owner | Needed by | Blocks | Recommendation |
+| --- | --- | --- | --- | --- |
+| 1. Does gcs-desktop-app stay the superproject? (K1) | GCS leads | `<date>` | Step 5 | Yes. The GCS, Database and UI DDs all assume it |
+| 2. Where does the compose file live: root `compose.yaml` with `include:`, or `start/docker-compose.yml`? (K6, K7) | GCS leads | Before the DD PRs | Steps 2 and 6; the GCS, Database and UI DD trees | Root `compose.yaml` with `name: ngcp-gcs` |
+| 3. Where do the shared Python libraries live? (K3) | GCS leads with SI and Infrastructure | `<date>` | The SI Dockerfile, `setup.py` | One copy at the top level: `gcs-infrastructure/`, `lib/gcs-packet`, `lib/xbee-python` |
+| 4. Map end state: Tiers 1 to 3 (keep the renderer, small extract, pre-rendered cache) or Tier 4 (static tiles)? If Tier 4, served by a container or bundled with Tauri? | GCS leads with UI | `<date>` | Step 8 | Tier 4: container B for development, bundled C for Demo Day |
+| 5. Which sites need offline tiles (campus test field, Demo Day field, others), up to what zoom, and how large an area do the vehicles fly in? | GCS leads with the vehicle teams | `<date>` | `sites.json` | One entry per site, about 10 × 10 km at zoom 14 to 16. `public/Atlases/SLO/` already holds zoom 14 to 16 tiles around San Luis Obispo that no code reads (UI DD); reuse them if that is a site |
+| 6. Real radios on Windows: run the SI bridge on the host, or standardize on `usbipd-win` and run it in a container? | SI lead | `<date>` | Step 4 (`--hardware`) | On the host |
+
+## Unit/End to End Testing
+
+Launcher and Compose:
+
+- `docker compose config` resolves with each profile, and `docker compose --profile sim config --services` doesn't list `si-bridge`.
+- From a fresh clone on Windows, macOS and Linux, `python start/setup.py` and then `python start/start.py` bring every service to healthy (`docker compose ps`) and open the UI.
+- Ctrl+C stops the host processes and the containers. Running `start.py` again keeps the mission data and the tiles.
+- `--hardware` on Windows starts the bridge on the host with the port from `.env`; on Linux it starts the `si-bridge` container with the radio at `/dev/xbee`.
+- SYS_18: stop or delete one service at a time (database, broker, map, bridge) and time how long `start.py` takes to bring it back. Each must be under 15 minutes.
+
+Map, after `map:build`:
+
+- `map/tiles/` holds the expected tile count for the box (560 for the example).
+- With the network disconnected and `map-static` (or option C) running, the map loads at zoom 14, 15 and 16, and panning stops at the edge of the box.
+- After Tier 4, on machines that use B or C, `docker system df -v` shows no `osm-data` volume, because they never import or start `map`.
+
+## Appendix A: Conflicts with the other design docs
+
+Severity: **High** blocks the single-command launch, **Med** causes breakage or rework, **Low** is cleanup.
+
+| # | Sev | Conflict | Source | Effect on launch | Resolution |
+| --- | --- | --- | --- | --- | --- |
+| K1 | High | **Which repo is the superproject.** | GCS DD | The root `compose.yaml` and `include:` paths depend on it. | Resolved: the GCS, Database and UI DDs all keep gcs-desktop-app as the root. Leads confirm (open question 1). |
+| K2 | High | **`src-tauri/` had no owner.** The GCS DD's UI move list leaves it out. | GCS DD | `start.py` needs to know where to run `bun tauri dev` and where `tauri.conf.json` lives. | Resolved by the UI DD: `src-tauri/` stays at the root, and `bun run tauri` runs from `gcs-user-interface/` with the CLI pointed at `../src-tauri`. Who owns the taurpc procedures is still open in the Database DD. |
+| K3 | High | **Infrastructure has four locations.** (1) GCS DD tree: `gcs-infrastructure/` at the root. (2) GCS DD snippet: `lib/` (from `cd ./lib`). (3) GCS DD pip paths: `.\infrastructure` and `.\infrastructure\lib\gcs-packet` (nested). (4) SI DD: `gcs-software-integration/lib/gcs-infrastructure`, a nested submodule against the GCS DD's own rule. The infra segment says to copy it into the main repo. | GCS, SI and infra branches | The SI Dockerfile's copy and `pip install` paths, and `setup.py`'s venv install, can't be written until this is settled. Nested checkouts mean several copies of `gcs-packet` and `xbee-python` can drift apart. | One copy at the superproject level: `gcs-infrastructure/` at the root, `lib/gcs-packet`, `lib/xbee-python`. SI's `requirements.txt` uses relative paths into those, or `setup.py` and the Dockerfile install them explicitly. Initialize submodules non-recursively. |
+| K4 | High | **Hard-coded `localhost` and `COM5` in SI.** No DD proposes SI's settings: the Database DD asks which names SI should use, and the SI DD takes `.env` out of git. | SI code, SI DD | The SI container can't reach RabbitMQ, and the host bridge can't find the radio on another machine. | SI reads `AMQP_HOST`, `AMQP_USER`, `AMQP_PASSWORD` and `XBEE_PORT` from the environment, with defaults from the shared `.env` (step 3). |
+| K5 | High | **Real XBees inside Docker on Windows and macOS.** The GCS DD's Start "should execute all the required programs". | GCS DD | Not possible in a container on Docker Desktop for Windows without `usbipd-win`, and on macOS only through Docker Desktop's USB/IP support with a separately run USB/IP server. | The SI bridge has a host mode (default on Windows and macOS) and a container mode (`hardware-linux`). `start.py --hardware` picks one by OS. |
+| K6 | Med | **`start/docker-compose.yml` in a subfolder.** | GCS, UI and Database DDs | The project name becomes `start`, so volumes are renamed and the map import runs again (M6). Relative paths must use `../`. | Root `compose.yaml` with `name: ngcp-gcs`; `start/` keeps only the Python scripts (open question 2). |
+| K7 | Med | **One compose file or one per team.** The GCS DD has a single file; this doc and the Database DD use one per submodule. | GCS DD | Not a hard conflict, but one central file means every team edits it. | Per-submodule files plus a root file with only `include:`. |
+| K8 | Med | **The SI entry point and module paths change.** `xbee_gcs.py` becomes `src/hardware_integration/main.py`, with snake_case renames. | SI DD | The container `command:` and the host launch command change. Running a file directly breaks package imports. | Run it as a module (`python -m src.hardware_integration.main`) and add `__init__.py` files. Land the SI rename before the SI compose file. |
+| K9 | Med | **The SI repo is renamed.** | SI DD | `.gitmodules` URLs and Compose build contexts point at the old name. GitHub redirects clones, but the redirect breaks if a new repo reuses the old name. | Update `.gitmodules` in the same PR as the rename. |
+| K10 | Med | **Python setup only in a host venv.** The GCS DD's setup creates a venv; containers need a Dockerfile. | GCS DD | Two install paths that can drift. | Both use one requirements file with root-relative `-e` paths (the SI DD renames `requirements.txt` to `setup/python/submodule_setup.txt`). The Dockerfile installs non-editable. |
+| K11 | Low | **The infra branch's copy of the GCS DD deletes `index.html`.** | `infraFileReorgDD` | `index.html` is Vite's entry point. Without it `bun tauri dev` and `vite build` fail. | The infra branch never changed that file, so a merge keeps the current GCS text, which already dropped the deletion. Keep `index.html`. |
+| K12 | Med | **Merging the branches deletes the infra segment.** The GCS branch deleted `Infrastructure/GCSFileReorg-Infra.md`, which the infra branch never changed, and the infra branch deleted the `Infrastructure/index.md` placeholder. `SIFileReorgDD` contains every GCS branch commit, so it carries the same deletion. | Branch history | A plain merge keeps the current GCS DD but drops both infra files, leaving the Infrastructure design-doc folder empty. | Merge `GCSFileReorgDD` first, then `SIFileReorgDD`. Then rebase `infraFileReorgDD` onto them and restore `GCSFileReorg-Infra.md` before merging it. |
+| K13 | Med | **Infra "part of the main application" or a library.** | Infra segment | Infra has no process of its own, so it needs no container. The risk is copying its code into the app instead of keeping it a submodule, which brings back the drift K3 removes. | Keep it a library submodule installed with pip. Write in the infra DD that it has no run-time service. |
+| K14 | Low | **`bun run osm:setup` and `osm:run`** call `docker compose` from the UI folder. | GCS and UI DDs move `package.json` | They keep working after the UI move, because Compose looks in parent folders for a compose file, and break once the services are renamed or Compose leaves the root. | Replace them with `map:build` and `map:serve`; from the superproject, `python start/start.py --map-only`. |
+| K15 | Low | **Deleting `public/`.** | GCS DD | `index.html` loads `/vite.svg` from it, and option C would serve tiles from it. | Resolved by the UI DD, which moves `public/` instead. |
+| K16 | Low | **Deleting `start.sh` before a replacement exists.** | GCS DD | No launcher in the meantime. | Delete it in the same PR that adds `start/start.py` (step 4). |
+| K17 | Low | **Windows-only paths and typos in the setup snippet** (`.\infrastructure`, `gttos://`, `--recursivegit`). | GCS DD | Copying them into a Linux Dockerfile or a bash script fails. | `setup.py` uses `pathlib`, and the DD shows commands with forward slashes. |
+| K18 | Low | **`gcs-databse` or `gcs-backend`.** | GCS DD vs Database DD | Compose `include:` paths and `.gitmodules` must match exactly. | Use `gcs-backend`, as the Database DD proposes. Update the GCS DD to match. |
+| K19 | Low | **Where RabbitMQ is defined.** The Database DD's compose file holds only Postgres and leaves RabbitMQ to the GCS-wide and SI owners; the SI DD takes the Rust RabbitMQ code. | Database and SI DDs | None, as long as one file defines it. | This doc puts `rabbitmq` next to `db` in `gcs-backend/docker/compose.yaml`. If SI ends up owning all RabbitMQ code, it moves to SI's compose file; `include:` works either way. |
+
+## Appendix B: How the tile server image works
+
+From the image's [`run.sh`](https://github.com/Overv/openstreetmap-tile-server/blob/v2.3.0/run.sh) (latest release `v2.3.0`, March 2023; the same on master). One image does two jobs, chosen by its command. Before either, `run.sh` compiles the carto style into `/data/style/mapnik.xml` if that file is missing.
+
+`import` (one time):
+
+1. Create a Postgres cluster in `/data/database/postgres/`, then the `renderer` role and the `gis` database with PostGIS and hstore. `createuser` fails if the role exists, which is the M1 error.
+2. Read the input: the URL in `DOWNLOAD_PBF` if set, otherwise the file mounted at `/data/region.osm.pbf`, otherwise a Luxembourg sample.
+3. Run `osm2pgsql` with the openstreetmap-carto Lua and `.style` files into `gis` (`THREADS` processes, plus `OSM2PGSQL_EXTRA_ARGS` and `FLAT_NODES` if set), then carto's `indexes.sql`.
+4. Run carto's `get-external-data.py`, which downloads about 1.06 GB of worldwide water and coastline shapefiles into memory, extracts them into `/data/style/data/<table>` (wiped on the next run) and loads them into Postgres (M7).
+5. Create the marker `/data/database/planet-import-complete` and stop.
+
+`run` (every launch) starts Postgres, Apache with `mod_tile` (which serves `/tile/{z}/{x}/{y}.png`) and `renderd`. On a miss in `/data/tiles/`, `renderd` has Mapnik draw an 8 × 8 "metatile" from PostGIS, caches it, and serves the tile. The import marker is copied to `/data/tiles/` on `run`.
+
+The image doesn't care what area the input covers, so cutting the map to the airfield only means mounting a smaller `/data/region.osm.pbf`. The shapefile step and the per-tile rendering don't shrink with the input, which is why the shapefile mirror and the pre-rendered or exported tiles matter as much as the clip. Re-check these paths if the pinned version changes.
