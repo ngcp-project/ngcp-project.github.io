@@ -1,0 +1,98 @@
+---
+title: Database File Reorg Design Doc
+description: DD for moving the Database code into the gcs-backend submodule and adding a State Manager
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+**Author(s):** Roberto M. Castro
+
+**Related Teams:** Software Integration, User Interface, Infrastructure
+
+**PR Link:** [#23](https://github.com/ngcp-project/ngcp-project.github.io/pull/23)
+
+The Database code moves out of `gcs-desktop-app/src-tauri/src` into `gcs-backend`, a new repo owned by the Database team. gcs-desktop-app adds it as a git submodule at its root, as the [GCS File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/GCSFileReorgDD/src/content/docs/gcs/Design%20Docs/GCS-Wide/GCSFileReorgDD.mdx) plans for every subteam (its tree calls this folder `gcs-databse/`), and the Tauri app in `src-tauri` uses it as a Rust library. Two things change on the way: the database layout moves out of Rust code into numbered SQL migration files, and one State Manager becomes the only code that changes mission and vehicle state.
+
+## Final file structure
+
+<FileTree>
+- gcs-backend/
+  - Cargo.toml (library crate `gcs_backend`)
+  - README.md
+  - .env.example
+  - docker/
+    - compose.yaml (Postgres service)
+  - migrations/
+    - 0001_baseline.sql
+    - 0002_mission_lifecycle_and_reports.sql
+    - 0003_zones_jsonb.sql
+    - 0004_telemetry_history.sql
+    - 0005_commands_and_events_log.sql
+  - src/
+    - lib.rs
+    - config.rs (reads `DATABASE_URL` and flags from `.env`)
+    - error.rs
+    - state_manager/ (the State Manager, the only code that changes live data)
+      - mod.rs
+      - store.rs
+      - missions.rs
+      - vehicles.rs
+      - commands.rs
+      - events.rs
+      - load.rs (rebuilds memory from Postgres at startup)
+    - domain/ (types and rules, no SQL and no live state)
+      - mission.rs
+      - zone.rs
+      - vehicle.rs
+      - telemetry.rs
+      - geo.rs
+    - db/ (the only code that runs SQL, one file per table)
+      - mod.rs
+      - …
+    - dev/
+      - seed.rs (demo missions, off by default)
+  - tests/
+    - state.rs
+    - migrations.rs
+</FileTree>
+
+Each folder has one job and replaces something in gcs-desktop-app today:
+
+| Folder | Replaces | Why |
+| --- | --- | --- |
+| `docker/` | The Postgres service in the root `docker-compose.yml` | The Database team keeps its container settings (pinned image, named volume) next to its code, and the GCS-wide start includes this file. |
+| `migrations/` | The `CREATE TABLE` strings in `init_db.rs` | The table layout lives in SQL files, and every database gets every change (next section). |
+| `config.rs`, `.env.example` | The connection string, hard-coded in four files | One `DATABASE_URL` setting instead of four copies. |
+| `state_manager/` | The five copies of mission and vehicle state ([The restructure](#the-restructure)) | One owner, so the copies can't drift apart. |
+| `domain/` | `missions/types.rs`, the geofence checks in `telemetry/geos.rs`, and the message types in `telemetry/types.rs` unless SI takes them (issue 1) | Types and rules with no SQL and no live state, so they can be tested without a database. |
+| `db/` | `missions/sql.rs`, `telemetry/sql.rs` | The only code that runs SQL. Queries return an error to the caller. Today they call `.expect()`, so a failed query stops the app at startup or kills that call during a mission. |
+| `dev/seed.rs` | The demo missions in `init_db.rs` | Demo data gets its own file, apart from the table layout. It still loads only when it's turned on. |
+| `tests/` | The `sql.rs` tests, which need an `ngcpdb_test` database that nothing creates | `#[sqlx::test]` gives each test a fresh database with the migrations applied. |
+
+## Why we need schema migrations
+
+Today the database's layout is written into the app's Rust code. `initialize_database()` in `init_db.rs` holds the four `CREATE TABLE` statements as strings and runs them on every launch, and the same file holds two demo missions as about 530 lines of `INSERT`s. With migrations, the layout is a set of SQL files that describe the database, the seed fills it with demo data only when asked, and the Rust code holds no table definitions: it runs the migrations, then reads and writes rows.
+
+`CREATE TABLE IF NOT EXISTS` only helps on a brand-new database: if a table is already there, Postgres skips the whole statement, so a change to that table, like a new column, never reaches a database someone already has. Almost everything new in this design needs schema changes. `sqlx::migrate!` builds the files in `migrations/` into the app. At startup it runs the ones that database hasn't run yet, in order, and records each in a `_sqlx_migrations` table, so every change reaches every machine the same way. A merged migration is never edited; a fix goes in a new one. Resets get safer too: `clear_database()` drops three of the four tables by name and leaves `telemetry` behind, while a reset that drops the schema and reruns the migrations can't miss one.
+
+Each migration has one purpose:
+
+| Migration | What it changes | Why |
+| --- | --- | --- |
+| `0001_baseline` | Today's four tables (`missions`, `vehicles`, `stages`, `telemetry`), with `IF NOT EXISTS` | Applies cleanly to new databases and to the ones we already have |
+| `0002_mission_lifecycle_and_reports` | Mission start and end times; survivor and fire reports; `current_stage_id` becomes a nullable foreign key instead of `-1`; drops the unused `stages.target_coordinate` | Reports survive a restart, and there are no placeholder ids |
+| `0003_zones_jsonb` | A `zones` table, with zones and search areas stored as JSONB | Replaces the hand-formatted `"(lat,long)"` strings and the code that parses them |
+| `0004_telemetry_history` | A row id, `received_at`, `mission_id`, and an index on vehicle and time | Replay (GCS_23 to GCS_25) needs telemetry ordered by time and filtered by mission. Today rows have neither, and no code reads them. |
+| `0005_commands_and_events_log` | A `commands` table (vehicle, kind, sent and acknowledged times, result) and a `mission_events` table (mission, stage and link changes) | Command results and the mission timeline can be replayed |
+
+## The restructure
+
+Today the database code lives in `src-tauri/src`, mixed in with the RabbitMQ and UI code, and mission and vehicle state is kept in five places, each with its own lock: `MissionApiImpl`, the `LAST_STATE` and `KEEP_OUT_ZONES` globals, `RabbitMQAPIImpl` and `CommandsApiImpl`. Those copies drift apart. For example, `start_mission` never updates `LAST_STATE`, so the geofence and survivor checks keep using whichever mission was active at launch. In `gcs-backend`, the State Manager in `state_manager/` is the single owner of that state. Every operator change goes through it in the same order: check that the change is allowed, save it to Postgres, update memory, publish an event to the UI, then send any vehicle command. The emergency stop and loiter commands skip the line: they go out first and are recorded after.
+
+The UI keeps calling the same taurpc procedures. The RabbitMQ code goes to SI, and it talks to the State Manager through `apply_telemetry` and a `CommandSender` interface. The code changes happen inside today's `src-tauri` first, one PR at a time with the app still running, and the files move into `gcs-backend` last.
+
+## Issues that could arise
+
+1. SI has to agree on how their RabbitMQ code talks to the State Manager. We propose that SI's consumers hand incoming telemetry to the State Manager through `apply_telemetry`, that SI adds a consumer for command acknowledgements (`command_ack`), and that SI implements a small `CommandSender` interface, which the State Manager uses to send vehicle commands over RabbitMQ. We also need to decide who owns the message types in `telemetry/types.rs`, because the SI DD moves them to SI. If SI hasn't agreed by `<date>`, the Database team writes this code inside `src-tauri` and hands it to SI when the files move.
+2. The files can't move until the GCS-wide layout is settled. Three questions are still open: where `src-tauri` goes, who creates the `gcs-backend` repo, and who owns the taurpc procedures the UI calls (the SI DD moves some of the files that define them). The code changes inside `src-tauri` don't wait on these answers. After the move, taurpc still has to write `src/lib/bindings.ts` into the UI folder.
+3. The State Manager makes one change at a time, so operator actions wait on each other and on the database. In our benchmark a telemetry insert took about 2.4 ms, so three vehicles sending once a second shouldn't be a problem. If Postgres goes down, changes that need saving return an error, while telemetry and the emergency stop keep working from memory.
