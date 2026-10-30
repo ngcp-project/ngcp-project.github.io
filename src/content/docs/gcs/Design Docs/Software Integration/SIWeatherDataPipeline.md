@@ -89,10 +89,7 @@ This alternatives proposes a solution to acquiring weather data directly from th
 - The microcontroller is continuously polling the sensors
 - The microcontroller alerady combines weather data into a single message
 - The microcontroller is continuously writing weather data over USB
-
-**Limitations:** 
-
-- If the GCS loses connection to the weather station, weather data messages get dropped
+- The GCS app has opened a serial port to establish connection to the weather station
 
 **Weather Data Struct**
 
