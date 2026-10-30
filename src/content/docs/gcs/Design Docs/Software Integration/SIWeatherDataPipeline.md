@@ -93,6 +93,40 @@ The struct and functions required to do this will exist in a new file called `we
 - The GCS app has opened a serial port to establish connection to the weather station
 - The GCS app reads data from the serial port fast enough to keep up with the speed that the MCU writes data to prevent accumulating a large number of old messages
 
+**Initialization**
+
+The serial port should be opened during Software Integration's initialization in `placeholder`. This is to establish connection to the Weather Station while the GCS establishes telemetry with the other systems. It also avoids the issue of forcing the UI or Database teams to manage the connection with the weather station. 
+
+This implementation uses the Rust crate https://crates.io/crates/serialport so that the GCS can easily interact with virtual serial ports as Rust does not natively support this.
+
+**Adding serialport as dependency** 
+In `placeholder.toml`, serialport can be added as a dependency like:
+```toml
+[dependencies]
+serialport = "4.3.0"
+```
+
+**Opening and Configuring the Port**
+
+In `placeholder_initialization.rs`, a virtual COM port will be opened to establish connection to the weather station. This will be implemened as:
+
+```rust
+fn main() {
+    ...
+    // Define the port name and the target baud rate
+    let port_name = "COM3";
+    let baud_rate = 115_200;
+
+    // Open and configure the port using the builder pattern
+    let mut port = serialport::new(port_name, baud_rate)
+        .timeout(Duration::from_millis(10)) // Set a read timeout
+        .open()
+        .expect("Failed to open serial port");
+
+    println!("Successfully opened port: {}", port_name);
+}
+```
+
 **Weather Data Struct**
 
 After the weather station's messages get read and parsed, its values are represented in a `WeatherData` struct.
