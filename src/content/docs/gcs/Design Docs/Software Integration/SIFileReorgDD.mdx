@@ -38,10 +38,10 @@ The existing code in [GCS-Integration-Library-2025-26](https://github.com/ngcp-p
     - `xbee_tag_gcs.py` (deprecated)
     - `xbee_tag_vehicle.py` (deprecated)
     - `.env` (should be private, not pushed to github; add to .gitignore)
-    - `weather_telem.py` (until we figure out rfp reqs)
+    - `weather_telem.py` (Data pipeline to be figured out in another DD)
 
 **The following files/folders will be renamed:**
-    - `SoftwareIntegration` to `src`
+    - `SoftwareIntegration/` to `src/`
     - `xbee_gcs.py` to `main.py`
     - `Testing` to `test`
     - `CommandListener.py` to `command_listener.py` (snake_case)
@@ -144,6 +144,46 @@ import { FileTree } from '@astrojs/starlight/components';
 Once everything is moved, we need to ensure it doesn't break the whole application (Expecially the rust side).
 
 This aims to outline how our team will interface with other teams.
+
+#### Interfacing with Infra
+Interfacing with infrastructure will remain intact. SI will continue using the library provided by Infra to carry out it's duties.
+
+#### Interfacing with GCS
+
+##### [ALTERNATIVE 1] Providing A Rust Package (WIP)
+SI will be providing functions in a Rust package that will be called by UI or DB in the State Manager to recieve or send data to and from the vehicles.
+
+This Rust Package will provide the following enums, structs, and public functions:
+
+```rust
+enum CommandIDs {
+
+}
+
+setup()
+recieve_telemetry()
+recieve_weather_data()
+send_command()
+```
+
+**Pros:**
+- List out pros if applicable
+
+**Cons:**
+- List out cons if applicable
+
+##### [ALTERNATIVE 2] Providing a Rust Package And Updating the State Manager (WIP)
+For this solution, SI will also be providing a Rust package with all the necessary methods, enums, and structs. 
+
+It differs from ALTERNATIVE 1 in how the State Manager will be updated.
+
+In this solution, UI/DB will need to provide a package/functions to update/interact with the State Manager. (Still need to review and look over the new state manager set up to determine if this is feesible.)
+
+**Pros:**
+- List out pros if applicable
+
+**Cons:**
+- List out cons if applicable
 
 ## Unit/End to End Testing
 List out what cases and edge cases you will be testing. If you are refactoring, no need to list the cases, just make sure it passes existing test cases. 
