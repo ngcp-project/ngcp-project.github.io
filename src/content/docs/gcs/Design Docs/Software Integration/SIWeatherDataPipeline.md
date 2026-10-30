@@ -81,10 +81,17 @@ This alternatives proposes a solution to acquiring weather data directly from th
 The struct and functions required to do this will exist in a new file called `weather_telemetry.rs`. This file should live in `placeholder/placeholder2`.
 
 **Pros:**
-- List out pros if applicable
+- The architecture is simplier becausean intermediate service such as RabbitMQ is not required
+- Data can be quickly shortly after it is written by the microcontroller
+- This implementation is simpler as the GCS can just call the provided function and receive a `WeatherData` struct
+- Weather conditions are not expected to change so rapidly that the serial approach would require extremely high update rates
+- The UI and database teams can choose whether to display, store, or process each returned weather reading.
 
 **Cons:**
-- List out cons if applicable
+-  If the serial connection is unavailable while the weather station transmits data, those messages may not be recoverable unless the microcontroller logs or stores them
+-  The GCS must read data quickly enough to keep up with the microcontroller’s transmission rate. Otherwise, messages may accumulate in the serial buffer
+-  The provided file does not provide a method to store weather data. UI or Database must decide how to store messages
+-  The provided file does not provide a solution if the port is unavailable or if  connection is lost 
 
 **Assumptions:** 
 - The microcontroller has brought up all sensors
@@ -92,6 +99,7 @@ The struct and functions required to do this will exist in a new file called `we
 - The microcontroller alerady combines weather data into a single message
 - The microcontroller is continuously writing weather data over USB
 - The GCS app has opened a serial port to establish connection to the weather station
+- The GCS app reads data from the serial port fast enough to keep up with the speed that the MCU writes data to prevent accumulating a large number of old messages
 
 **Weather Data Struct**
 
