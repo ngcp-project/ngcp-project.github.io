@@ -9,7 +9,7 @@ import { FileTree } from '@astrojs/starlight/components';
 
 **Related Teams:** Software Integration, User Interface, Infrastructure
 
-**PR Link:** `<add once the PR is open>`
+**PR Link:** [#23](https://github.com/ngcp-project/ngcp-project.github.io/pull/23)
 
 The Database code moves out of `gcs-desktop-app/src-tauri/src` into `gcs-backend`, a new repo owned by the Database team. gcs-desktop-app adds it as a git submodule at its root, as the [GCS File Reorg DD](https://github.com/ngcp-project/ngcp-project.github.io/blob/GCSFileReorgDD/src/content/docs/gcs/Design%20Docs/GCS-Wide/GCSFileReorgDD.mdx) plans for every subteam (its tree calls this folder `gcs-databse/`), and the Tauri app in `src-tauri` uses it as a Rust library. Two things change on the way: the database layout moves out of Rust code into numbered SQL migration files, and one State Manager becomes the only code that changes mission and vehicle state.
 
