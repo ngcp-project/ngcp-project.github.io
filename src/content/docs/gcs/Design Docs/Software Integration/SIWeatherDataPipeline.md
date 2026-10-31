@@ -68,28 +68,28 @@ MyProgram {
 
 #### [PREFERRED] Read Weather Data Directly
 
-This alternatives proposes a solution to acquiring weather data directly from the weather station. This is to be done by directly reading weather data from a serial connection over USB, parsing the data, and returning a struct containing weather data. 
+This alternative proposes a solution to acquire weather data directly from the weather station. This is to be done by directly reading weather data from a serial connection over USB, parsing the data, and returning a struct containing weather data. 
 
-The struct and functions required to do this will exist in a new file called `weather_telemetry.rs`. This file should live in `placeholder/placeholder2`.
+The struct and functions required to do this will exist in a new file called `weather_telemetry.rs`. This file should live in `placeholder1/placeholder2`.
 
 **Pros:**
-- The architecture is simplier becausean intermediate service such as RabbitMQ is not required
-- Data can be quickly shortly after it is written by the microcontroller
-- This implementation is simpler as the GCS can just call the provided function and receive a `WeatherData` struct
+- The architecture is simple because an intermediate service such as RabbitMQ is not required
+- Data can be quickly processed after it is transmitted by the microcontroller
+- This implementation is easy to use as the GCS can just call the provided function and receive a `WeatherData` struct
 - Weather conditions are not expected to change so rapidly that the serial approach would require extremely high update rates
-- The UI and database teams can choose whether to display, store, or process each returned weather reading.
+- The UI and database teams can choose whether to display, store, or process each returned weather reading
 
 **Cons:**
 -  If the serial connection is unavailable while the weather station transmits data, those messages may not be recoverable unless the microcontroller logs or stores them
 -  The GCS must read data quickly enough to keep up with the microcontroller’s transmission rate. Otherwise, messages may accumulate in the serial buffer
--  The provided file does not provide a method to store weather data. UI or Database must decide how to store messages
--  The provided file does not provide a solution if the port is unavailable or if  connection is lost 
+- The proposed implementation does not provide a method for storing weather data The UI or database team must decide how the messages should be stored
+-  The proposed implementation currently does not provide a solution to cases where connection is lost or a port is unavailable
 
 **Assumptions:** 
-- The microcontroller has brought up all sensors
-- The microcontroller is continuously polling the sensors
-- The microcontroller alerady combines weather data into a single message
-- The microcontroller is continuously writing weather data over USB
+- The microcontroller has initialized and configured all sensors
+- The microcontroller is periodically polling the sensors
+- The microcontroller already combines weather data into a single message
+- The microcontroller is periodically transmitting weather data over USB
 - The GCS app has opened a serial port to establish connection to the weather station
 - The GCS app reads data from the serial port fast enough to keep up with the speed that the MCU writes data to prevent accumulating a large number of old messages
 
@@ -97,7 +97,7 @@ The struct and functions required to do this will exist in a new file called `we
 
 The serial port should be opened during Software Integration's initialization in `placeholder`. This is to establish connection to the Weather Station while the GCS establishes telemetry with the other systems. It also avoids the issue of forcing the UI or Database teams to manage the connection with the weather station. 
 
-This implementation uses the Rust crate https://crates.io/crates/serialport so that the GCS can easily interact with virtual serial ports as Rust does not natively support this.
+This implementation uses the Rust crate https://crates.io/crates/serialport so that the GCS can easily interact with serial ports as Rust does not natively support this.
 
 **Adding serialport as dependency** 
 In `placeholder.toml`, serialport can be added as a dependency like:
@@ -108,7 +108,7 @@ serialport = "4.3.0"
 
 **Opening and Configuring the Port**
 
-In `placeholder_initialization.rs`, a virtual COM port will be opened to establish connection to the weather station. This will be implemened as:
+In `placeholder_initialization.rs`, a virtual COM port will be opened to establish connection to the weather station. This will be implemented as:
 
 ```rust
 fn main() {
@@ -145,7 +145,7 @@ pub struct WeatherData {
 
 **Get Weather Data Function**
 
-The `get_weather_data()` function will read one complete message from the serial connection. It will then pass the message to `parse_weather_data()` and return the resulting `WeatherData` struct to the GCS application.
+The `get_weather_data()` function will read one complete message from the serial connection. It will pass the message to `parse_weather_data()` and return a `Result` containing either a `WeatherData` struct or an error to the GCS application.
 
 The function assumes that the GCS has already established the serial connection. Its responsibility is to read and process one message rather than manage the connection.
 
@@ -154,7 +154,7 @@ The function assumes that the GCS has already established the serial connection.
 // 1. A buffered reader reads one line containing a message
 // 2. The message is stored as a String
 // 3. The string is passed to parse_weather_data()
-// 4. A WeatherDataStruct is returned
+// 4. A Result containing either a WeatherData struct or an error is returned
 pub fn get_weather_data<R: BufRead>(
     reader: &mut R,
 ) -> Result<WeatherData, WeatherDataError> {
@@ -165,6 +165,10 @@ pub fn get_weather_data<R: BufRead>(
     parse_weather_data(&message)
 }
 ```
+
+`WeatherDataError` is included conceptually here and should represent serial
+read failures, invalid message formats, missing fields, and invalid values.
+
 **Parse Weather Data Function**
 
 The `parse_weather_data()` function will convert the read message transmitted by the weather station into a `WeatherData` struct. It will identify the fields in the message, convert their values to the appropriate data types, and return an error if the message is missing the required fields or contains invalid data.
@@ -176,7 +180,7 @@ The `parse_weather_data()` function will convert the read message transmitted by
 fn parse_weather_data(
     message: &str,
 ) -> Result<WeatherData, WeatherDataError> {
-
+    todo!("Implement after the message format is finalized")
 }
 ```
 
