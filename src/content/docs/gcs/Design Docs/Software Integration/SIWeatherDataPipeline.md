@@ -180,6 +180,19 @@ fn parse_weather_data(
 }
 ```
 
+**Testing**
+
+The `parse_weather_data()` function should be unit tested using sample messages
+without requiring a physical weather station. Tests should include valid
+messages, missing required fields, invalid values, and incorrectly formatted
+messages.
+
+The `get_weather_data()` function can be tested using simulated serial input to
+verify that it reads a message and passes it to the parser. Testing with the
+actual weather station should verify that the serial connection, baud rate,
+message delimiter, and message format work as expected.
+
+
 #### [ALTERNATIVE 1] Alternative Implementation 1 Title
 Then you will describe an alternative implementation with it's pros and cons. List as many alternative sections as needed. You may have multiple subsections of preferred and alternaitve implementations for different parts of your solution. 
 
