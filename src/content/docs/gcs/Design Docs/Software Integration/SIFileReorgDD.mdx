@@ -217,3 +217,19 @@ A specific test file can be run with:
 ```bash
 pytest test/gcs_desktop_integration/test_command_emergency_stop.py
 ```
+
+#### Writing a Unit Test with Pytest
+
+A pytest unit test calls a function with a specific input and uses an assertion to verify that the result is correct. For example, a function that parses a JSON command could be tested as follows:
+
+```python
+def test_parse_command():
+    command = '{"Command ID": 1, "Packet ID": 10}'
+
+    result = parse_command(command)
+
+    assert result["Command ID"] == 1
+    assert result["Packet ID"] == 10
+```
+
+The test provides a sample command to `parse_command()` and verifies that the returned values are correct. Since this test only checks the command-parsing function, it does not require a physical XBee, serial port, or connection to the rest of the application. Additional tests should cover invalid commands and other edge cases. This is for unit testing and does not count as an integration test.
