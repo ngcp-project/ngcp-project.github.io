@@ -1,0 +1,308 @@
+---
+title: Map Setup Optimizations
+description: Optimizing the setup step for the map server
+
+sidebar:
+  order: 2
+---
+
+**Author(s):** Kiyo
+
+**Related Teams:** User Interface, Database
+
+**PR Link:** https://github.com/ngcp-project/ngcp-project.github.io/pull/26
+
+## Background
+
+`osm:setup` downloads and imports the entirety of Southern California, causing an excessively long setup time. The official reason for this configuration is unknown but some possibilities include:
+
+1. It was easier to just fetch the SoCal import as opposed to cutting out our own extract,
+2. Since the map origin is a default, we can test the GCS anywhere in the region without having to import anything.
+
+On a laptop with a `13th Gen Intel(R) Core(TM) i5-1335U` (12 cores), it takes 20+ minutes to get through the entire setup. Particular pain points included:
+
+- The `osm.pbf` download (`641.55M`)
+- Processing `planet_osm_roads` (9m 45s)
+  - Nodes: `88301k @ ~360k/s` (4m 6s)
+  - Ways: `9521k @ ~35k/s` (4m 9s)
+  - Relations: `109320 @ ~1000/s` (1m 30s)
+- Analyzing table `planet_osm_polygon` (~3.5 m)
+- Needing to delete the map volume and redo the entire setup if it happens to fail
+
+This design document serves to investigate methods to speed up this setup process for the end user.
+
+### RFP Requirement(s)
+
+N/A
+
+## Solution
+
+The [map docker image](https://hub.docker.com/r/overv/openstreetmap-tile-server) utilizes two files to construct all the map tiles: an `.osm.pbf` file containing all the map data and a `.poly` file defining the bounds for which map data should be processed.
+
+Given these definitions, we could provide our own `.poly` file defining map boundaries to only be the sections that we need for the mission/any possible testing, and nothing more. For instance, we can write a file defining the boundaries to be a polygonal area consisting of 10 miles around the mission location.
+
+## Design/Implementation
+
+According to the [OpenStreetMap wiki](https://wiki.openstreetmap.org/wiki/Osmosis/Polygon_Filter_File_Format), a polygon filter file is a text file that has the following format:
+
+> - The first line contains the name of the file.
+>  - The second line contains a name which begins a section defining an individual polygon.
+>  - The third and subsequent lines in the section contain the coordinates of the polygon points in the order longitude, latitude, separated by whitespace. By convention, the coordinates are represented in scientific notation, but Osmosis and osmconvert are flexible about the actual numeric representation.
+>  - The last line of the polygon section may repeat the starting point to close the circuit. If it is omitted a closing line will be drawn to the start point. If your polygon contains a centroid as the first point, the last line of your polygon section should complete the path to the actual polygon starting point.
+>  - The polygon section is closed by the text "END" on a line by itself.
+>  - The polygon section name may optionally be prefixed with "!" to subtract the polygon. The section(s) containing the larger area from which to subtract should be listed first. All the polygon sections are combined together to create the final filter area.
+>  - If you want to create a filter area which spans the antimeridian (+/-180 degrees), split the polygon at the antimeridian and create additional polygon sections which continue the desired area on the other side.
+>  - The file is closed by another "END" on a line by itself.
+Several of these files may be combined to one multi-sectioned file. In this case each section must be separated from its preceding section by an empty line (combined files are used by the programs osmrelpoly and osmassignpoly).
+
+For our purposes, we can mostly concern ourselves with the set of lines defining polygon coordinates. These are given in `longitude latitude` and are written in scientific notation. By defining a series of these coordinates, we can target a specific area that the tile server will process tiles for, skipping any tiles that fall outside of the defined areas.
+
+The [`docker-compose.yml`](https://github.com/ngcp-project/gcs-desktop-app/blob/main/docker-compose.yml) file would be modified as such:
+
+```diff
+// docker-compose.yml
+services:
+  osm-setup:
+    image: overv/openstreetmap-tile-server
+    volumes:
+      - osm-data:/data/database/
++      - ./relative/path/to/map.poly:/data/socal.poly
+    environment:
+      DOWNLOAD_PBF: https://download.geofabrik.de/north-america/us/california/socal-latest.osm.pbf
+-      DOWNLOAD_POLY: https://download.geofabrik.de/north-america/us/california/socal.poly
+    command: "import"
+    restart: "no"
+...
+```
+
+### Code Blocks
+
+#### OSM Wiki Example
+
+https://wiki.openstreetmap.org/wiki/Osmosis/Polygon_Filter_File_Format#Example
+
+```
+australia_v
+first_area
+     0.1446693E+03    -0.3826255E+02
+     0.1446627E+03    -0.3825661E+02
+     0.1446763E+03    -0.3824465E+02
+     0.1446813E+03    -0.3824343E+02
+     0.1446824E+03    -0.3824484E+02
+     0.1446826E+03    -0.3825356E+02
+     0.1446876E+03    -0.3825210E+02
+     0.1446919E+03    -0.3824719E+02
+     0.1447006E+03    -0.3824723E+02
+     0.1447042E+03    -0.3825078E+02
+     0.1446758E+03    -0.3826229E+02
+     0.1446693E+03    -0.3826255E+02
+END
+second_area
+     0.1422436E+03    -0.3839315E+02
+     0.1422496E+03    -0.3839070E+02
+     0.1422543E+03    -0.3839025E+02
+     0.1422574E+03    -0.3839155E+02
+     0.1422467E+03    -0.3840065E+02
+     0.1422433E+03    -0.3840048E+02
+     0.1422420E+03    -0.3839857E+02
+     0.1422436E+03    -0.3839315E+02
+END
+END
+```
+
+#### Socal Data Import
+
+https://download.geofabrik.de/north-america/us/california/socal.poly
+
+```
+none
+1
+   -1.214401E+02   3.248438E+01
+   -1.214393E+02   3.579717E+01
+   -1.201937E+02   3.579012E+01
+   -1.201937E+02   3.578986E+01
+   -1.197552E+02   3.579175E+01
+   -1.185714E+02   3.579076E+01
+   -1.184698E+02   3.579394E+01
+   -1.182742E+02   3.579110E+01
+   -1.180687E+02   3.579287E+01
+   -1.180449E+02   3.579213E+01
+   -1.180176E+02   3.578814E+01
+   -1.179287E+02   3.578789E+01
+   -1.179252E+02   3.579049E+01
+   -1.179257E+02   3.579867E+01
+   -1.179241E+02   3.579961E+01
+   -1.176335E+02   3.579766E+01
+   -1.176330E+02   3.579809E+01
+   -1.157404E+02   3.579492E+01
+   -1.157369E+02   3.579719E+01
+   -1.157366E+02   3.580889E+01
+   -1.157349E+02   3.581055E+01
+   -1.156433E+02   3.581022E+01
+   -1.146277E+02   3.500427E+01
+   -1.146249E+02   3.486439E+01
+   -1.145877E+02   3.484439E+01
+   -1.145465E+02   3.476482E+01
+   -1.144709E+02   3.471778E+01
+   -1.143761E+02   3.452936E+01
+   -1.143750E+02   3.445368E+01
+   -1.143327E+02   3.445415E+01
+   -1.141809E+02   3.435846E+01
+   -1.141342E+02   3.430644E+01
+   -1.141291E+02   3.425629E+01
+   -1.141571E+02   3.425681E+01
+   -1.142013E+02   3.421747E+01
+   -1.142221E+02   3.420355E+01
+   -1.142202E+02   3.418894E+01
+   -1.142590E+02   3.416991E+01
+   -1.142908E+02   3.416210E+01
+   -1.143212E+02   3.413497E+01
+   -1.144154E+02   3.409035E+01
+   -1.144369E+02   3.401389E+01
+   -1.145123E+02   3.393981E+01
+   -1.144997E+02   3.386687E+01
+   -1.145217E+02   3.381143E+01
+   -1.145041E+02   3.376922E+01
+   -1.144925E+02   3.370582E+01
+   -1.145126E+02   3.365725E+01
+   -1.145235E+02   3.364744E+01
+   -1.145203E+02   3.361157E+01
+   -1.145260E+02   3.360840E+01
+   -1.145315E+02   3.360296E+01
+   -1.145390E+02   3.359084E+01
+   -1.145339E+02   3.356870E+01
+   -1.145221E+02   3.355830E+01
+   -1.145256E+02   3.353965E+01
+   -1.145934E+02   3.349064E+01
+   -1.146330E+02   3.341393E+01
+   -1.147171E+02   3.340323E+01
+   -1.146936E+02   3.335817E+01
+   -1.146954E+02   3.333847E+01
+   -1.147243E+02   3.329527E+01
+   -1.146918E+02   3.328428E+01
+   -1.146706E+02   3.326798E+01
+   -1.146706E+02   3.322247E+01
+   -1.146747E+02   3.316023E+01
+   -1.146981E+02   3.311125E+01
+   -1.146693E+02   3.305691E+01
+   -1.145849E+02   3.303981E+01
+   -1.145267E+02   3.303466E+01
+   -1.145084E+02   3.302530E+01
+   -1.144699E+02   3.297657E+01
+   -1.144639E+02   3.295883E+01
+   -1.144786E+02   3.293493E+01
+   -1.144631E+02   3.291466E+01
+   -1.144612E+02   3.290939E+01
+   -1.144670E+02   3.284266E+01
+   -1.144926E+02   3.282358E+01
+   -1.145090E+02   3.281453E+01
+   -1.145289E+02   3.279333E+01
+   -1.145250E+02   3.276405E+01
+   -1.145259E+02   3.275148E+01
+   -1.145805E+02   3.273437E+01
+   -1.146151E+02   3.272676E+01
+   -1.146888E+02   3.273574E+01
+   -1.147011E+02   3.274394E+01
+   -1.147161E+02   3.271911E+01
+   -1.147298E+02   3.271042E+01
+   -1.147271E+02   3.271506E+01
+   -1.153424E+02   3.267262E+01
+   -1.155683E+02   3.265614E+01
+   -1.166072E+02   3.257662E+01
+   -1.169223E+02   3.255058E+01
+   -1.171244E+02   3.253384E+01
+   -1.172420E+02   3.252511E+01
+   -1.177506E+02   3.248665E+01
+   -1.214401E+02   3.248438E+01
+END
+END
+```
+
+### Alternatives
+
+#### [PREFERRED] Provide our own `.poly` file
+
+According to the description of the docker image we use:
+
+> Please note: If you're not importing the whole planet, then the `.poly` file is necessary to limit automatic updates to the relevant region. Therefore, when you only have a `.osm.pbf` file but not a `.poly` file, you should not enable automatic updates.
+
+This suggests that the `.poly` file limits the range of the map that gets imported into the tile server. Thus, by providing our own map, we can limit the map that we set up to only the portions that we need for the mission, eliminating the costs of setting up extra regions that go unused in our application.
+
+See [Design/Implementation](#designimplementation) for how we could implement this design.
+
+**Pros:**
+- Majority of time in setup is spent processing the regions, so limiting the ranges would give it less to process
+- Smaller volume size as a result of the above point
+- Regions that we will most likely never go to will not be processed
+- Since we'd only manage the `.poly` file defining the boundaries of the region, updates to the map data will still be provided
+- Minimal changes to current setup
+
+**Cons:**
+- We must maintain the `.poly` file ourselves
+  - If the location of the mission or any tests change, we must update it to fit the new locations
+  - This file would hence update infrequently (likely every year for each mission location), but would be easy to forget about since it would occur only once a year
+- User must still run setup step before running map server
+- Map data volume still exists, so if there are any issues with the map data, the user must still delete it and re-run setup again
+
+#### [ALTERNATIVE 1] Preconfigured Docker Image
+
+Once the setup step has been run on the user's device, there is no need anymore to go through the entire map setup process anymore. Therefore, we could provide our own tile map image that has gone through the setup process and already has everything the user needs in order to make it work. Furthermore, we could write a GitHub Actions workflow that would automatically build and push the image to GitHub's Container Registry.
+
+The following is an example of a Dockerfile we could write to automatically go through the setup process with the original Southern California map data:
+
+```
+FROM overv/openstreetmap-tile-server
+
+ENV DOWNLOAD_PBF=https://download.geofabrik.de/north-america/us/california/socal-latest.osm.pbf
+ENV DOWNLOAD_POLY=https://download.geofabrik.de/north-america/us/california/socal.poly
+
+RUN ./run.sh import
+```
+
+Once we have an image pushed to a container registry, we can remove the setup service and point the server service in [`docker-compose.yml`](https://github.com/ngcp-project/gcs-desktop-app/blob/main/docker-compose.yml) to it instead:
+
+```diff
+// docker-compose.yml
+services:
+-  osm-setup:
+-    image: overv/openstreetmap-tile-server
+-    volumes:
+-      - osm-data:/data/database/
+-    environment:
+-      DOWNLOAD_PBF: https://download.geofabrik.de/north-america/us/california/socal-latest.osm.pbf
+-      DOWNLOAD_POLY: https://download.geofabrik.de/north-america/us/california/socal.poly
+-    command: "import"
+-    restart: "no"
+-
+  osm-server:
+-    image: overv/openstreetmap-tile-server
++    image: ghcr.io/ngcp-project/map-tile-server
+    shm_size: 1gb
+-    depends_on:
+-      - osm-setup
+    ports:
+      - "8080:80"
+-    volumes:
+-      - osm-data:/data/database/
+    command: "run"
+...
+```
+
+**Pros:**
+- No setup step on user's device; simply pull the image and run it
+- Setup moved to Dockerfile and automated workflow (via GitHub Actions)
+
+**Cons:**
+- VERY large image when combined with map data
+  - Each image layer has a limit of 10 GB imposed by GitHub's Container Registry
+  - In other words, each command executed in a Dockerfile can only write up to 10 GB max
+  - https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#troubleshooting
+- On its own, this still imports the entirety of Southern California into the map server
+- Mounting a volume over the map data would cause the image's map data to be inaccessible
+- Changes to map do not persist between runs
+- Setup cost still incurred locally if developers are testing changes to the map image itself
+- Dockerfile and workflows must be maintained in a repository somewhere
+
+## Unit/End to End Testing
+
+This is a refactor of the map setup process, so unit tests remain mostly unchanged. However, in the case of [[ALTERNATIVE 1]](#alternative-1-preconfigured-docker-image), we will need to remove the map setup step from the unit tests.
