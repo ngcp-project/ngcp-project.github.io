@@ -92,7 +92,7 @@ Then you will describe an alternative implementation with it's pros and cons. Li
 
 **Unit testing in Rust**
 - $ cargo test runs all tests within the code
-- To change a regular function into a test function, add #[test]
+- When testing, duplicate the function you want to test right after the original function, and add #[test] to the new function to indicate unit testing.
 - "panic!" should be used when there is a status that is impossible is reached
 - assert! checks if a statement is true
 
@@ -144,13 +144,13 @@ executing entire program and debugging that way
         use super::*;
     - Then call the function with test_ ahead of it to classify as for unit testing purposes to get the resule back
     - Run cargo test after to get the specified results of the unit testing.
-- ? is a rust operator, which allows for more specific testing  essentially is a signaler which immdieately ends if Result<T,e> is returned, and if Err is produced by an operator, it would be returned early.
+- ? is a rust operator, which allows for more specific testing, when used, the regular result which is returned is Result<T,E>, and the tests should end with Ok(()).
 - assert_eq! is the main thing we'd be using real time
 - assert_ne! is the other function we can use which is the opposite of assert_eq and evaluates to true if the equation is false.
 - You can add a second argument inside the assert statement to stand for a specific error message that you want to show to the user.
 - Can add should_panic to function (#[should_panic] after #[test]), which should be used when verifying that a program panics for a certain case(s).
 - When doing should_panic, you should add an expected parameter to ensure the most precise results. EX:     #[should_panic(expected = "less than or equal to 100")]
-- Finally, Result<T,E> can be used if you do not want the program to panic and auto quit, this would make the program continue OR error.
+- Finally, Result<T,E> can be used if you do not want the program to panic and auto quit.
 - Can be implemented with Ok(T) (T is expected data) / Err(E) (E = error details)
 
 Example usage of basic unit testing layout in Rust - 
@@ -168,17 +168,17 @@ Example usage of basic unit testing layout in Rust -
 **Additonal features which make unit testing in Rust much easier** 
 - Instead, we should use "use *pretty_assertions::assert_eq;*", this does the same thing as assert_eq! but is "prettier formatted" with colors and easier to read.
 - *Proptesting* is very useful for the fact that it can be used to test a function  many times with different, alternating values, which allow for easier testing.
-- *cargo-nexttest*(cargo add cargo-nextest) increases base cargo test efficency by 3x through parallel execution. *cargo nextest run* allows for all tests to be run at the same time. *cargo nexttest list* lists all tests which are needed to be run.
+- *cargo-nextest*(cargo add cargo-nextest) increases base cargo test efficency by 3x through parallel execution. *cargo nextest run* allows for all tests to be run at the same time. *cargo nextest list* lists all tests which are needed to be run.
 - We can also use *testcontainers* in Rust (cargo add testcontainers
-cargo add testcontainers-modules) which makes a setup and al    so destroys the container after automatically; meant for independant testing.
+cargo add testcontainers-modules) which makes a setup and also destroys the container after automatically; meant for integration testing.git status --short --branch
 - *cargo-fuzz* is another crate meant to help with fuzz testing in Rust (finds the minimial inputs to the function which make it fail) (cargo fuzz init)
 - *cargo-mutants* changes variables which would make code fail or succeed, based on what has changed.
 
 
 # What we should be using
 - *cargo test*, for basic testing of #[tests]
-- *proptest!* for mass, automated testing and finding edge cases
-- *cargo-nexttest* for upgraded base cargo test.
+- *proptest!* for mass, automated testing and finding edge cases. Use prop_assert! (proptest alternative to regular assert!) and prop_assert_eq! (proptest alternative to regular equal checking)
+- *cargo-nextest* for upgraded base cargo test.
 - *mockall* allows us to simulate the other pieces of the program which we cant connect to in live time, like the vehicle
 - *cargo-tarpaulin* generates percentages and reports if needed, makes data based on the functions that were touched by the test portion.
 
@@ -194,7 +194,7 @@ cargo add testcontainers-modules) which makes a setup and al    so destroys the 
 # Comments and Documentation for Rust End
 - Use // for implementation details; lines of code or logic inside a block of code
 - Use /* comment */ for multiline comments.
-- Use //// for header comments, comments which are describing entire functions that proceed it.
+- Use /// for header comments, comments which are describing entire functions that proceed it.
 - Use //! for commenting on a parent item (top of crate/module file often)
 - Use #[test], #[ignore], #[should_panic], etc, above the function to indicate what you are testing, make sure it's well formatted.
 - Explain each functions parameters, purpose, what you are testing for, and what each line does CLEARLY.
