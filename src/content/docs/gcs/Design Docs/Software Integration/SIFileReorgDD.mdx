@@ -196,7 +196,9 @@ End to end testing would be test files that test the entire process from point A
 
 Python unit tests will use the [`pytest`](https://docs.pytest.org/en/stable/) framework. `pytest` is an open-source Python testing framework for writing unit tests and integration tests. `pytest` was chosen because it does not require a significant amount of boilerplate syntax and provides automatic test discovery, readable assertions, reusable fixtures, and support for parameterized tests.
 
-Python unit tests will be placed in the directory `test/gcs_desktop_integration/`. Test files should begin with `test_` and test functions should also begin with `test_` so that pytest can automatically discover them.
+All Python unit tests developed moving forward will use `pytest`. Existing Python test files that contain unit tests will be refactored and updated to follow this standard.
+
+Python unit tests will be placed in the directory `test/gcs_desktop_integration/`. Test files should follow the format `test_<filename>.py`, where `<filename>` corresponds to the Python file being tested. For example, tests for `command_emergency_stop.py` would be placed in `test_command_emergency_stop.py`. Test functions should also begin with `test_` so that pytest can automatically discover them.
 
 #### Installation and Usage 
 
